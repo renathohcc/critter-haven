@@ -53,5 +53,17 @@ CHEST_CAPACITY = UpgradeDef(
     max_level=10,
 )
 
-UPGRADES = (GOLD_PRODUCTION, SPAWN_SPEED, HABITAT_CAPACITY, CHEST_CAPACITY)
+# Nível 0 = sem progresso offline (feature bloqueada). O 1º nível
+# desbloqueia 1h de progresso offline; cada nível seguinte soma +1h,
+# até o teto de 4h. Decisão de design registrada com o dev.
+OFFLINE_PROGRESS = UpgradeDef(
+    id="offline_progress",
+    name="Progresso Offline",
+    description="Desbloqueia e aumenta o tempo de progresso offline (+1h/nível, máx. 4h)",
+    base_cost=500,
+    effect_per_level=3600,
+    max_level=4,
+)
+
+UPGRADES = (GOLD_PRODUCTION, SPAWN_SPEED, HABITAT_CAPACITY, CHEST_CAPACITY, OFFLINE_PROGRESS)
 UPGRADES_BY_ID = {u.id: u for u in UPGRADES}

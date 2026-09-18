@@ -13,6 +13,7 @@ from critter_haven.config.upgrades import (
     CHEST_CAPACITY,
     GOLD_PRODUCTION,
     HABITAT_CAPACITY,
+    OFFLINE_PROGRESS,
     SPAWN_SPEED,
     UPGRADES,
     UPGRADES_BY_ID,
@@ -82,10 +83,19 @@ class App:
             window_state = state_by_name(save_dict.get("window_state", DEFAULT_STATE.name))
             always_on_top = save_dict.get("always_on_top", True)
             gold_multiplier = 1.0 + self.upgrades.effect_total(GOLD_PRODUCTION)
+            max_offline_seconds = self.upgrades.effect_total(OFFLINE_PROGRESS)
             offline_result = apply_offline_progress(
-                self.habitat, self.wallet, self.chest, self.album, gold_multiplier, elapsed
+                self.habitat,
+                self.wallet,
+                self.chest,
+                self.album,
+                gold_multiplier,
+                elapsed,
+                max_offline_seconds,
             )
-            self.welcome_back_message = self._build_welcome_back_message(offline_result)
+            self.welcome_back_message = self._build_welcome_back_message(
+                offline_result, elapsed, max_offline_seconds
+            )
 
         self.window_state = window_state
         self.surface = pygame.display.set_mode(
@@ -118,8 +128,15 @@ class App:
         self.menu_thread.start()
 
     @staticmethod
-    def _build_welcome_back_message(offline_result: dict) -> str | None:
+    def _build_welcome_back_message(
+        offline_result: dict, raw_elapsed_seconds: float, max_offline_seconds: float
+    ) -> str | None:
         if offline_result["elapsed_seconds"] < WELCOME_BACK_MIN_ELAPSED_SECONDS:
+            if raw_elapsed_seconds >= WELCOME_BACK_MIN_ELAPSED_SECONDS and max_offline_seconds == 0:
+                return (
+                    "Homie esperou parado enquanto você esteve fora... "
+                    "compre o upgrade de Progresso Offline pra mudar isso!"
+                )
             return None
         minutes = int(offline_result["elapsed_seconds"] // 60)
         gold = int(offline_result["gold_gain"])

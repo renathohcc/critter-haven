@@ -1,8 +1,13 @@
 """Progresso enquanto o jogo está fechado (GDD 6.10). Calculado
 analiticamente a partir do tempo decorrido — nunca simulando o jogo
 tick a tick — para não travar a abertura do jogo depois de horas
-offline. O tempo é limitado a MAX_OFFLINE_SECONDS para não conceder
-recursos ilimitados caso o relógio do sistema seja adulterado."""
+offline.
+
+O progresso offline é um recurso comprável (upgrade "Progresso
+Offline"): no nível 0 (não comprado) `max_offline_seconds` é 0 e
+nenhum progresso é concedido; cada nível soma +1h, até 4h no nível
+máximo. Isso também evita ganho ilimitado por relógio do sistema
+adulterado, já que o teto nunca passa do que o upgrade permite."""
 
 from __future__ import annotations
 
@@ -13,8 +18,6 @@ from critter_haven.economy.wallet import Wallet
 from critter_haven.entities.album import Album
 from critter_haven.entities.habitat import Habitat
 
-MAX_OFFLINE_SECONDS = 12 * 60 * 60  # 12h
-
 
 def apply_offline_progress(
     habitat: Habitat,
@@ -23,8 +26,9 @@ def apply_offline_progress(
     album: Album,
     gold_multiplier: float,
     elapsed_seconds: float,
+    max_offline_seconds: float,
 ) -> dict:
-    elapsed = max(0.0, min(elapsed_seconds, MAX_OFFLINE_SECONDS))
+    elapsed = max(0.0, min(elapsed_seconds, max_offline_seconds))
 
     gold_gain = (
         sum(c.gold_per_second for c in habitat.creatures) * gold_multiplier * elapsed

@@ -5,10 +5,9 @@ from critter_haven.economy.wallet import Wallet
 from critter_haven.entities.album import Album
 from critter_haven.entities.creature import Creature
 from critter_haven.entities.habitat import Habitat
-from critter_haven.systems.offline_progress import (
-    MAX_OFFLINE_SECONDS,
-    apply_offline_progress,
-)
+from critter_haven.systems.offline_progress import apply_offline_progress
+
+ONE_HOUR = 3600.0
 
 
 def get_species(species_id: str):
@@ -24,13 +23,26 @@ def make_habitat_with_creature(species_id: str) -> Habitat:
     return habitat
 
 
-def test_gold_gain_scales_with_elapsed_time():
+def test_no_progress_when_offline_feature_not_purchased():
     habitat = make_habitat_with_creature("mossnib")
     wallet = Wallet()
     chest = Chest()
     album = Album()
 
-    result = apply_offline_progress(habitat, wallet, chest, album, 1.0, 100.0)
+    result = apply_offline_progress(habitat, wallet, chest, album, 1.0, 5000.0, 0.0)
+
+    assert result["elapsed_seconds"] == 0.0
+    assert result["gold_gain"] == 0.0
+    assert wallet.gold == 0.0
+
+
+def test_gold_gain_scales_with_elapsed_time_within_cap():
+    habitat = make_habitat_with_creature("mossnib")
+    wallet = Wallet()
+    chest = Chest()
+    album = Album()
+
+    result = apply_offline_progress(habitat, wallet, chest, album, 1.0, 100.0, ONE_HOUR)
 
     assert result["gold_gain"] == 12 * 100.0
     assert wallet.gold == 12 * 100.0
@@ -42,7 +54,7 @@ def test_gold_gain_respects_multiplier():
     chest = Chest()
     album = Album()
 
-    apply_offline_progress(habitat, wallet, chest, album, 2.0, 10.0)
+    apply_offline_progress(habitat, wallet, chest, album, 2.0, 10.0, ONE_HOUR)
 
     assert wallet.gold == 12 * 10.0 * 2.0
 
@@ -54,10 +66,24 @@ def test_elapsed_time_is_capped_at_max_offline_seconds():
     album = Album()
 
     result = apply_offline_progress(
-        habitat, wallet, chest, album, 1.0, MAX_OFFLINE_SECONDS * 10
+        habitat, wallet, chest, album, 1.0, ONE_HOUR * 10, ONE_HOUR
     )
 
-    assert result["elapsed_seconds"] == MAX_OFFLINE_SECONDS
+    assert result["elapsed_seconds"] == ONE_HOUR
+
+
+def test_elapsed_time_capped_at_four_hours_max_level():
+    habitat = make_habitat_with_creature("mossnib")
+    wallet = Wallet()
+    chest = Chest()
+    album = Album()
+
+    four_hours = ONE_HOUR * 4
+    result = apply_offline_progress(
+        habitat, wallet, chest, album, 1.0, ONE_HOUR * 100, four_hours
+    )
+
+    assert result["elapsed_seconds"] == four_hours
 
 
 def test_items_are_produced_during_offline_time():
@@ -66,7 +92,7 @@ def test_items_are_produced_during_offline_time():
     chest = Chest()
     album = Album()
 
-    result = apply_offline_progress(habitat, wallet, chest, album, 1.0, 20.0)
+    result = apply_offline_progress(habitat, wallet, chest, album, 1.0, 20.0, ONE_HOUR)
 
     assert result["items_gained"] == {"Folha Viva": 2}
     assert chest.items["Folha Viva"] == 2
@@ -79,7 +105,9 @@ def test_spawns_happen_when_energy_overflows_offline():
     chest = Chest()
     album = Album()
 
-    result = apply_offline_progress(habitat, wallet, chest, album, 1.0, ENERGY_MAX * 2.5)
+    result = apply_offline_progress(
+        habitat, wallet, chest, album, 1.0, ENERGY_MAX * 2.5, ONE_HOUR
+    )
 
     assert len(habitat.creatures) == 2
     assert len(result["spawned_names"]) == 2
@@ -95,7 +123,7 @@ def test_spawns_stop_when_habitat_is_full():
     chest = Chest()
     album = Album()
 
-    apply_offline_progress(habitat, wallet, chest, album, 1.0, ENERGY_MAX * 5)
+    apply_offline_progress(habitat, wallet, chest, album, 1.0, ENERGY_MAX * 5, ONE_HOUR)
 
     assert len(habitat.creatures) == 1
 
@@ -107,6 +135,6 @@ def test_discovered_species_are_registered_in_album():
     chest = Chest()
     album = Album()
 
-    apply_offline_progress(habitat, wallet, chest, album, 1.0, ENERGY_MAX)
+    apply_offline_progress(habitat, wallet, chest, album, 1.0, ENERGY_MAX, ONE_HOUR)
 
     assert len(album.discovered_ids) == 1

@@ -1,4 +1,4 @@
-from critter_haven.config.upgrades import GOLD_PRODUCTION
+from critter_haven.config.upgrades import GOLD_PRODUCTION, OFFLINE_PROGRESS
 from critter_haven.economy.upgrades import UpgradeManager
 from critter_haven.economy.wallet import Wallet
 
@@ -40,3 +40,17 @@ def test_cannot_buy_past_max_level():
     wallet = Wallet(gold=10**9)
     assert manager.cost(GOLD_PRODUCTION) is None
     assert manager.buy(GOLD_PRODUCTION, wallet) is False
+
+
+def test_offline_progress_starts_locked_at_zero_hours():
+    manager = UpgradeManager()
+    assert manager.effect_total(OFFLINE_PROGRESS) == 0
+
+
+def test_offline_progress_grants_one_hour_per_level_up_to_four():
+    manager = UpgradeManager()
+    wallet = Wallet(gold=10**9)
+    for expected_hours in (1, 2, 3, 4):
+        manager.buy(OFFLINE_PROGRESS, wallet)
+        assert manager.effect_total(OFFLINE_PROGRESS) == expected_hours * 3600
+    assert manager.buy(OFFLINE_PROGRESS, wallet) is False  # nivel maximo (4h)
