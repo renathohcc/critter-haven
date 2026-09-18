@@ -232,6 +232,11 @@ class App:
         fill_rect.width = int(bar_rect.width * self.habitat.energy_ratio())
         pygame.draw.rect(self.surface, ENERGY_BAR_COLOR, fill_rect)
 
+        font = pygame.font.SysFont("consolas", 11)
+        count_text = f"Criaturas: {len(self.habitat.creatures)}/{self.habitat.max_creatures}"
+        count_surf = font.render(count_text, True, (230, 230, 230))
+        self.surface.blit(count_surf, (bar_rect.right + 8, bar_rect.y - 1))
+
     def _render_hud(self) -> None:
         width, _ = self.surface.get_size()
         gold_multiplier = 1.0 + self.upgrades.effect_total(GOLD_PRODUCTION)
