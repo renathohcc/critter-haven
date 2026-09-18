@@ -4,16 +4,29 @@ from __future__ import annotations
 
 import pygame
 
+from critter_haven.config.planets import PLANETS
+from critter_haven.config.spawn import BASE_MAX_CREATURES, ENERGY_PER_SECOND
+from critter_haven.config.upgrades import (
+    CHEST_CAPACITY,
+    GOLD_PRODUCTION,
+    HABITAT_CAPACITY,
+    SPAWN_SPEED,
+    UPGRADES,
+    UPGRADES_BY_ID,
+)
 from critter_haven.config.window_states import DEFAULT_STATE, next_state
 from critter_haven.core import window
 from critter_haven.data.species import load_planet
+from critter_haven.config.economy import BASE_CHEST_CAPACITY
 from critter_haven.economy.chest import Chest
 from critter_haven.economy.pricing import build_price_map, sell_all
+from critter_haven.economy.upgrades import UpgradeManager
 from critter_haven.economy.wallet import Wallet
 from critter_haven.entities.habitat import Habitat
 from critter_haven.entities.creature import Creature
 from critter_haven.render.creature_render import draw_creature
 from critter_haven.systems.production_system import update_production
+from critter_haven.systems.travel_system import can_travel, travel
 
 FPS_FOCUSED = 60
 FPS_UNFOCUSED = 15
@@ -50,13 +63,23 @@ class App:
         self.wallet = Wallet()
         self.chest = Chest()
         self.price_map = build_price_map(species_pool)
+        self.upgrades = UpgradeManager()
 
         self.selected_creature: Creature | None = None
         self.sell_button_rect = pygame.Rect(0, 0, 0, 0)
         self.size_button_rect = pygame.Rect(0, 0, 0, 0)
         self.pin_button_rect = pygame.Rect(0, 0, 0, 0)
+        self.ship_nav_rect = pygame.Rect(0, 0, 0, 0)
+        self.upgrades_nav_rect = pygame.Rect(0, 0, 0, 0)
+        self.ship_open = False
+        self.upgrades_open = False
+        self.upgrade_buy_rects: dict[str, pygame.Rect] = {}
+        self.travel_button_rects: dict[str, pygame.Rect] = {}
+        self.panel_rect = pygame.Rect(0, 0, 0, 0)
         self.last_sale_feedback: str | None = None
         self.last_sale_feedback_timer = 0.0
+        self.last_travel_feedback: str | None = None
+        self.last_travel_feedback_timer = 0.0
 
     def run(self) -> None:
         self.running = True
@@ -84,6 +107,22 @@ class App:
         if self.pin_button_rect.collidepoint(pos):
             self._apply_always_on_top(not self.always_on_top)
             return
+        if self.ship_nav_rect.collidepoint(pos):
+            self.ship_open = not self.ship_open
+            self.upgrades_open = False
+            return
+        if self.upgrades_nav_rect.collidepoint(pos):
+            self.upgrades_open = not self.upgrades_open
+            self.ship_open = False
+            return
+
+        if self.upgrades_open:
+            self._handle_upgrades_click(pos)
+            return
+        if self.ship_open:
+            self._handle_ship_click(pos)
+            return
+
         if self.sell_button_rect.collidepoint(pos):
             self._sell_all()
             return
@@ -94,6 +133,49 @@ class App:
             self.selected_creature = creature
         else:
             self.selected_creature = None
+
+    def _handle_upgrades_click(self, pos: tuple[int, int]) -> None:
+        for upgrade_id, rect in self.upgrade_buy_rects.items():
+            if rect.collidepoint(pos):
+                self.upgrades.buy(UPGRADES_BY_ID[upgrade_id], self.wallet)
+                self._apply_upgrade_effects()
+                return
+        if not self.panel_rect.collidepoint(pos):
+            self.upgrades_open = False
+
+    def _handle_ship_click(self, pos: tuple[int, int]) -> None:
+        for planet_id, rect in self.travel_button_rects.items():
+            if rect.collidepoint(pos):
+                destination = next(p for p in PLANETS if p.id == planet_id)
+                self._attempt_travel(destination)
+                return
+        if not self.panel_rect.collidepoint(pos):
+            self.ship_open = False
+
+    def _attempt_travel(self, destination) -> None:
+        if destination.active:
+            return
+        if travel(destination, self.chest):
+            self.last_travel_feedback = f"Homie viajou para {destination.name}!"
+        elif destination.requirement_pending:
+            self.last_travel_feedback = "Requisito de viagem ainda não definido."
+        else:
+            self.last_travel_feedback = (
+                f"Faltam itens: {destination.required_item} "
+                f"x{destination.required_quantity}"
+            )
+        self.last_travel_feedback_timer = 3.0
+
+    def _apply_upgrade_effects(self) -> None:
+        self.habitat.energy_per_second = ENERGY_PER_SECOND + self.upgrades.effect_total(
+            SPAWN_SPEED
+        )
+        self.habitat.max_creatures = int(
+            BASE_MAX_CREATURES + self.upgrades.effect_total(HABITAT_CAPACITY)
+        )
+        self.chest.capacity = int(
+            BASE_CHEST_CAPACITY + self.upgrades.effect_total(CHEST_CAPACITY)
+        )
 
     def _cycle_window_size(self) -> None:
         self.window_state = next_state(self.window_state)
@@ -117,9 +199,14 @@ class App:
 
     def _update(self, dt: float) -> None:
         self.habitat.update(dt)
-        update_production(self.habitat.creatures, dt, self.wallet, self.chest)
+        gold_multiplier = 1.0 + self.upgrades.effect_total(GOLD_PRODUCTION)
+        update_production(
+            self.habitat.creatures, dt, self.wallet, self.chest, gold_multiplier
+        )
         if self.last_sale_feedback_timer > 0:
             self.last_sale_feedback_timer = max(0.0, self.last_sale_feedback_timer - dt)
+        if self.last_travel_feedback_timer > 0:
+            self.last_travel_feedback_timer = max(0.0, self.last_travel_feedback_timer - dt)
 
     def _render(self) -> None:
         self.surface.fill(BACKGROUND_COLOR)
@@ -130,6 +217,10 @@ class App:
         self._render_toolbar()
         self._render_sell_button()
         self._render_selection_panel()
+        if self.upgrades_open:
+            self._render_upgrades_panel()
+        elif self.ship_open:
+            self._render_ship_panel()
         pygame.display.flip()
 
     def _render_energy_bar(self) -> None:
@@ -143,7 +234,10 @@ class App:
 
     def _render_hud(self) -> None:
         width, _ = self.surface.get_size()
-        gold_per_second = sum(c.gold_per_second for c in self.habitat.creatures)
+        gold_multiplier = 1.0 + self.upgrades.effect_total(GOLD_PRODUCTION)
+        gold_per_second = (
+            sum(c.gold_per_second for c in self.habitat.creatures) * gold_multiplier
+        )
         font = pygame.font.SysFont("consolas", 16)
         text = f"Ouro: {self.wallet.gold:.0f}   (+{gold_per_second:.0f}/s)"
         surf = font.render(text, True, (255, 255, 255))
@@ -182,6 +276,20 @@ class App:
             font,
             mouse_pos,
             active=self.always_on_top,
+        )
+
+        self.ship_nav_rect = pygame.Rect(208, 28, 70, 22)
+        self._draw_toolbar_button(
+            self.ship_nav_rect, "Nave", font, mouse_pos, active=self.ship_open
+        )
+
+        self.upgrades_nav_rect = pygame.Rect(286, 28, 90, 22)
+        self._draw_toolbar_button(
+            self.upgrades_nav_rect,
+            "Upgrades",
+            font,
+            mouse_pos,
+            active=self.upgrades_open,
         )
 
     def _draw_toolbar_button(
@@ -243,6 +351,84 @@ class App:
         for i, line in enumerate(lines):
             surf = font.render(line, True, (255, 255, 255))
             self.surface.blit(surf, (panel.x + 8, panel.y + 8 + i * 20))
+
+    def _render_panel_background(self, title: str) -> pygame.Rect:
+        width, height = self.surface.get_size()
+        self.panel_rect = pygame.Rect(10, 55, width - 20, height - 65)
+        pygame.draw.rect(self.surface, (15, 15, 20), self.panel_rect)
+        pygame.draw.rect(self.surface, (255, 255, 255), self.panel_rect, width=1)
+        font = pygame.font.SysFont("consolas", 15, bold=True)
+        title_surf = font.render(title, True, (255, 255, 255))
+        self.surface.blit(title_surf, (self.panel_rect.x + 10, self.panel_rect.y + 8))
+        return self.panel_rect
+
+    def _render_upgrades_panel(self) -> None:
+        panel = self._render_panel_background("Upgrades")
+        self.upgrade_buy_rects.clear()
+        font = pygame.font.SysFont("consolas", 13)
+        row_y = panel.y + 32
+        row_height = min(30, max(18, (panel.height - 40) // len(UPGRADES)))
+
+        for upgrade in UPGRADES:
+            level = self.upgrades.level(upgrade.id)
+            cost = self.upgrades.cost(upgrade)
+            label = f"{upgrade.name} (nv {level}/{upgrade.max_level})"
+            label_surf = font.render(label, True, (230, 230, 230))
+            self.surface.blit(label_surf, (panel.x + 10, row_y + 4))
+
+            buy_rect = pygame.Rect(panel.right - 130, row_y, 120, row_height - 4)
+            can_afford = cost is not None and self.wallet.can_afford(cost)
+            if cost is None:
+                color, text = (80, 80, 80), "MAX"
+            elif can_afford:
+                color, text = SELL_BUTTON_COLOR, f"{cost:.0f} ouro"
+            else:
+                color, text = (90, 60, 60), f"{cost:.0f} ouro"
+            pygame.draw.rect(self.surface, color, buy_rect, border_radius=4)
+            btn_surf = font.render(text, True, (20, 20, 20) if cost else (200, 200, 200))
+            self.surface.blit(btn_surf, btn_surf.get_rect(center=buy_rect.center))
+            self.upgrade_buy_rects[upgrade.id] = buy_rect
+
+            row_y += row_height
+
+    def _render_ship_panel(self) -> None:
+        panel = self._render_panel_background("Nave — Destinos")
+        self.travel_button_rects.clear()
+        font = pygame.font.SysFont("consolas", 13)
+        row_y = panel.y + 32
+        row_height = min(34, max(20, (panel.height - 40) // len(PLANETS)))
+
+        for planet in PLANETS:
+            if planet.active:
+                status = "Atual"
+            elif planet.requirement_pending:
+                status = "Bloqueado (requisito a definir)"
+            elif can_travel(planet, self.chest):
+                status = "Requisito atendido!"
+            else:
+                have = self.chest.items.get(planet.required_item, 0)
+                status = f"Precisa: {planet.required_item} ({have}/{planet.required_quantity})"
+
+            label = f"{planet.name} — {planet.theme}"
+            label_surf = font.render(label, True, (230, 230, 230))
+            self.surface.blit(label_surf, (panel.x + 10, row_y))
+            status_surf = font.render(status, True, (200, 200, 140))
+            self.surface.blit(status_surf, (panel.x + 10, row_y + 16))
+
+            if not planet.active:
+                travel_rect = pygame.Rect(panel.right - 100, row_y + 4, 90, row_height - 8)
+                enabled = can_travel(planet, self.chest)
+                color = SELL_BUTTON_COLOR if enabled else (70, 70, 70)
+                pygame.draw.rect(self.surface, color, travel_rect, border_radius=4)
+                btn_surf = font.render("Viajar", True, (20, 20, 20))
+                self.surface.blit(btn_surf, btn_surf.get_rect(center=travel_rect.center))
+                self.travel_button_rects[planet.id] = travel_rect
+
+            row_y += row_height
+
+        if self.last_travel_feedback and self.last_travel_feedback_timer > 0:
+            feedback_surf = font.render(self.last_travel_feedback, True, (255, 230, 140))
+            self.surface.blit(feedback_surf, (panel.x + 10, panel.bottom - 22))
 
     def quit(self) -> None:
         pygame.quit()

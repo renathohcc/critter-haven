@@ -22,12 +22,13 @@ class Habitat:
     max_x: float = 780.0
     spawn_y: float = 60.0
     energy: float = 0.0
+    energy_per_second: float = ENERGY_PER_SECOND
     max_creatures: int = BASE_MAX_CREATURES
     creatures: list[Creature] = field(default_factory=list)
     last_spawn_species: Species | None = None
 
     def update(self, dt: float) -> Species | None:
-        self.energy = min(ENERGY_MAX, self.energy + ENERGY_PER_SECOND * dt)
+        self.energy = min(ENERGY_MAX, self.energy + self.energy_per_second * dt)
         spawned = None
         # Se o habitat estiver cheio, a energia fica represada no máximo em
         # vez de se perder — assim que houver espaço, o spawn acontece na
