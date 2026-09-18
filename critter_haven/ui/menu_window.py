@@ -1,7 +1,8 @@
 """Janela de menu separada (Tkinter, thread própria) com o painel
-completo do habitat: stats, upgrades e nave. Roda numa thread dedicada;
-toda comunicação com o jogo (Pygame, thread principal) passa pelo
-MenuBridge — nunca lemos/escrevemos o estado do jogo diretamente aqui.
+completo do habitat: stats, upgrades, nave e álbum. Roda numa thread
+dedicada; toda comunicação com o jogo (Pygame, thread principal) passa
+pelo MenuBridge — nunca lemos/escrevemos o estado do jogo diretamente
+aqui.
 """
 
 from __future__ import annotations
@@ -9,11 +10,14 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from critter_haven.config.upgrades import UPGRADES
 from critter_haven.config.planets import PLANETS
+from critter_haven.config.upgrades import UPGRADES
 from critter_haven.core.menu_bridge import MenuBridge
+from critter_haven.data.species import load_planet_safe
 
 POLL_INTERVAL_MS = 200
+
+RARITY_LABEL = {"common": "Comum", "rare": "Rara", "special": "Especial"}
 
 
 class MenuWindow:
@@ -33,7 +37,19 @@ class MenuWindow:
         self.root.withdraw()
 
     def _build_widgets(self) -> None:
-        stats = ttk.LabelFrame(self.root, text="Habitat")
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill="both", expand=True, padx=6, pady=6)
+
+        habitat_tab = ttk.Frame(self.notebook)
+        self.album_tab = ttk.Frame(self.notebook)
+        self.notebook.add(habitat_tab, text="Habitat")
+        self.notebook.add(self.album_tab, text="Álbum")
+
+        self._build_habitat_tab(habitat_tab)
+        self._build_album_tab(self.album_tab)
+
+    def _build_habitat_tab(self, parent: ttk.Frame) -> None:
+        stats = ttk.LabelFrame(parent, text="Habitat")
         stats.pack(fill="x", padx=8, pady=6)
         self.gold_label = ttk.Label(stats, text="Ouro: -", anchor="w")
         self.gold_label.pack(fill="x", padx=6, pady=2)
@@ -42,7 +58,7 @@ class MenuWindow:
         self.chest_label = ttk.Label(stats, text="Baú: -", anchor="w")
         self.chest_label.pack(fill="x", padx=6, pady=2)
 
-        controls = ttk.LabelFrame(self.root, text="Janela")
+        controls = ttk.LabelFrame(parent, text="Janela")
         controls.pack(fill="x", padx=8, pady=6)
         self.size_button = ttk.Button(
             controls, text="Tamanho", command=lambda: self.bridge.push_command("cycle_size")
@@ -52,10 +68,14 @@ class MenuWindow:
             controls, text="Fixar", command=lambda: self.bridge.push_command("toggle_pin")
         )
         self.pin_button.pack(side="left", padx=6, pady=6)
-        self.album_button = ttk.Button(controls, text="Álbum (em breve)", state="disabled")
+        self.album_button = ttk.Button(
+            controls,
+            text="Álbum",
+            command=lambda: self.notebook.select(self.album_tab),
+        )
         self.album_button.pack(side="left", padx=6, pady=6)
 
-        upgrades_frame = ttk.LabelFrame(self.root, text="Upgrades")
+        upgrades_frame = ttk.LabelFrame(parent, text="Upgrades")
         upgrades_frame.pack(fill="x", padx=8, pady=6)
         self.upgrade_rows: dict[str, dict[str, tk.Widget]] = {}
         for upgrade in UPGRADES:
@@ -72,7 +92,7 @@ class MenuWindow:
             button.pack(side="right")
             self.upgrade_rows[upgrade.id] = {"label": label, "button": button}
 
-        ship_frame = ttk.LabelFrame(self.root, text="Nave — Destinos")
+        ship_frame = ttk.LabelFrame(parent, text="Nave — Destinos")
         ship_frame.pack(fill="both", expand=True, padx=8, pady=6)
         self.ship_rows: dict[str, dict[str, tk.Widget]] = {}
         for planet in PLANETS:
@@ -102,6 +122,43 @@ class MenuWindow:
                 "status_label": status_label,
                 "button": button,
             }
+
+    def _build_album_tab(self, parent: ttk.Frame) -> None:
+        planet_notebook = ttk.Notebook(parent)
+        planet_notebook.pack(fill="both", expand=True, padx=6, pady=6)
+
+        self.album_progress_labels: dict[str, ttk.Label] = {}
+        self.album_species_widgets: dict[str, dict[str, tk.Widget]] = {}
+
+        for planet in PLANETS:
+            tab = ttk.Frame(planet_notebook)
+            planet_notebook.add(tab, text=planet.name)
+
+            progress_label = ttk.Label(tab, text="0/0 catalogadas", anchor="w")
+            progress_label.pack(fill="x", padx=6, pady=(6, 2))
+            self.album_progress_labels[planet.id] = progress_label
+
+            species_pool = load_planet_safe(planet.id)
+            if not species_pool:
+                ttk.Label(
+                    tab,
+                    text="Nenhuma criatura definida ainda (conteúdo pós-demo).",
+                    anchor="w",
+                    foreground="#888888",
+                ).pack(fill="x", padx=6, pady=6)
+                continue
+
+            for species in species_pool:
+                card = ttk.LabelFrame(tab, text="???")
+                card.pack(fill="x", padx=6, pady=4)
+                detail_label = ttk.Label(
+                    card, text="Ainda não descoberto.", anchor="w", justify="left", wraplength=440
+                )
+                detail_label.pack(fill="x", padx=6, pady=4)
+                self.album_species_widgets[species.id] = {
+                    "card": card,
+                    "detail": detail_label,
+                }
 
     def _poll(self) -> None:
         if self.bridge.stop_event.is_set():
@@ -161,6 +218,34 @@ class MenuWindow:
                 widgets["button"].state(["!disabled"])
             else:
                 widgets["button"].state(["disabled"])
+
+        self._refresh_album(snapshot.get("album", {}))
+
+    def _refresh_album(self, album_snapshot: dict) -> None:
+        for planet in PLANETS:
+            info = album_snapshot.get(planet.id)
+            if not info:
+                continue
+            self.album_progress_labels[planet.id].config(
+                text=f"{info['discovered']}/{info['total']} catalogadas"
+            )
+            for entry in info["species"]:
+                widgets = self.album_species_widgets.get(entry["id"])
+                if not widgets:
+                    continue
+                if entry["discovered"]:
+                    widgets["card"].config(text=entry["name"])
+                    rarity = RARITY_LABEL.get(entry["rarity"], entry["rarity"])
+                    widgets["detail"].config(
+                        text=(
+                            f"Raridade: {rarity}   Produção: {entry['gold_per_second']} ouro/s\n"
+                            f"Item: {entry['item_name']}\n\n"
+                            f"“{entry['description']}”"
+                        )
+                    )
+                else:
+                    widgets["card"].config(text="???")
+                    widgets["detail"].config(text="Ainda não descoberto.")
 
 
 def run_menu_window(bridge: MenuBridge) -> None:

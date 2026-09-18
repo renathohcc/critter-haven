@@ -33,5 +33,11 @@ def load_planet(planet: str) -> list[Species]:
     return load_all()[planet]
 
 
+def load_planet_safe(planet: str) -> list[Species]:
+    """Como load_planet, mas retorna lista vazia se o planeta ainda não
+    tem criaturas definidas (Calyra/Aerthos/Glacivar são pós-demo)."""
+    return load_all().get(planet, [])
+
+
 def by_rarity(species: list[Species], rarity: str) -> list[Species]:
     return [s for s in species if s.rarity == rarity]

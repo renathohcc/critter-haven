@@ -20,11 +20,12 @@ from critter_haven.config.upgrades import (
 from critter_haven.config.window_states import DEFAULT_STATE, next_state
 from critter_haven.core import window
 from critter_haven.core.menu_bridge import MenuBridge
-from critter_haven.data.species import load_planet
+from critter_haven.data.species import load_planet, load_planet_safe
 from critter_haven.economy.chest import Chest
 from critter_haven.economy.pricing import build_price_map, sell_all
 from critter_haven.economy.upgrades import UpgradeManager
 from critter_haven.economy.wallet import Wallet
+from critter_haven.entities.album import Album
 from critter_haven.entities.habitat import Habitat
 from critter_haven.entities.creature import Creature
 from critter_haven.render.creature_render import draw_creature
@@ -68,6 +69,7 @@ class App:
         self.chest = Chest()
         self.price_map = build_price_map(species_pool)
         self.upgrades = UpgradeManager()
+        self.album = Album()
 
         self.selected_creature: Creature | None = None
         self.sell_button_rect = pygame.Rect(0, 0, 0, 0)
@@ -169,6 +171,32 @@ class App:
                 "can_travel": can_travel(planet, self.chest),
             }
 
+        album_info = {}
+        for planet in PLANETS:
+            species_pool = load_planet_safe(planet.id)
+            discovered, total = self.album.progress(species_pool)
+            entries = []
+            for species in species_pool:
+                if self.album.is_discovered(species):
+                    entries.append(
+                        {
+                            "id": species.id,
+                            "discovered": True,
+                            "name": species.name,
+                            "rarity": species.rarity,
+                            "gold_per_second": species.base_gold_per_second,
+                            "item_name": species.item_name,
+                            "description": species.description,
+                        }
+                    )
+                else:
+                    entries.append({"id": species.id, "discovered": False})
+            album_info[planet.id] = {
+                "discovered": discovered,
+                "total": total,
+                "species": entries,
+            }
+
         self.menu_bridge.publish(
             {
                 "gold": self.wallet.gold,
@@ -178,6 +206,7 @@ class App:
                 "chest_count": self.chest.total_count(),
                 "chest_capacity": self.chest.capacity,
                 "window_state": self.window_state.name,
+                "album": album_info,
                 "always_on_top": self.always_on_top,
                 "upgrades": upgrades_info,
                 "planets": planets_info,
@@ -230,7 +259,9 @@ class App:
         self.last_sale_feedback_timer = 2.0
 
     def _update(self, dt: float) -> None:
-        self.habitat.update(dt)
+        spawned = self.habitat.update(dt)
+        if spawned:
+            self.album.register(spawned)
         gold_multiplier = 1.0 + self.upgrades.effect_total(GOLD_PRODUCTION)
         update_production(
             self.habitat.creatures, dt, self.wallet, self.chest, gold_multiplier
