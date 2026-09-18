@@ -25,3 +25,10 @@ DEFAULT_HEIGHT = DEFAULT_STATE.height
 def next_state(current: WindowState) -> WindowState:
     index = STATES.index(current)
     return STATES[(index + 1) % len(STATES)]
+
+
+def state_by_name(name: str) -> WindowState:
+    for state in STATES:
+        if state.name == name:
+            return state
+    return DEFAULT_STATE

@@ -39,5 +39,13 @@ def load_planet_safe(planet: str) -> list[Species]:
     return load_all().get(planet, [])
 
 
+def all_species_by_id() -> dict[str, Species]:
+    return {
+        species.id: species
+        for species_list in load_all().values()
+        for species in species_list
+    }
+
+
 def by_rarity(species: list[Species], rarity: str) -> list[Species]:
     return [s for s in species if s.rarity == rarity]

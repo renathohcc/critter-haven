@@ -17,10 +17,10 @@ from critter_haven.config.upgrades import (
     UPGRADES,
     UPGRADES_BY_ID,
 )
-from critter_haven.config.window_states import DEFAULT_STATE, next_state
+from critter_haven.config.window_states import DEFAULT_STATE, next_state, state_by_name
 from critter_haven.core import window
 from critter_haven.core.menu_bridge import MenuBridge
-from critter_haven.data.species import load_planet, load_planet_safe
+from critter_haven.data.species import all_species_by_id, load_planet, load_planet_safe
 from critter_haven.economy.chest import Chest
 from critter_haven.economy.pricing import build_price_map, sell_all
 from critter_haven.economy.upgrades import UpgradeManager
@@ -28,10 +28,16 @@ from critter_haven.economy.wallet import Wallet
 from critter_haven.entities.album import Album
 from critter_haven.entities.habitat import Habitat
 from critter_haven.entities.creature import Creature
+from critter_haven.persistence.save_file import load_game, save_game
+from critter_haven.persistence.serializer import build_save_dict, restore_from_save
 from critter_haven.render.creature_render import draw_creature
+from critter_haven.systems.offline_progress import apply_offline_progress
 from critter_haven.systems.production_system import update_production
 from critter_haven.systems.travel_system import can_travel, travel
 from critter_haven.ui.menu_window import run_menu_window
+
+AUTOSAVE_INTERVAL_SECONDS = 30.0
+WELCOME_BACK_MIN_ELAPSED_SECONDS = 30.0
 
 FPS_FOCUSED = 60
 FPS_UNFOCUSED = 15
@@ -49,27 +55,48 @@ class App:
     def __init__(self) -> None:
         pygame.init()
         pygame.display.set_caption("Critter Haven: Homie's Journey")
-        self.window_state = DEFAULT_STATE
-        self.surface = pygame.display.set_mode(
-            (self.window_state.width, self.window_state.height)
-        )
-        self.clock = pygame.time.Clock()
-        self.running = False
-        self.focused = True
-        self.always_on_top = False
-        self._apply_always_on_top(True)
 
         species_pool = load_planet("elyndor")
-        self.habitat = Habitat(
-            planet="elyndor",
-            species_pool=species_pool,
-            max_x=self.window_state.width - 20,
-        )
+        self.habitat = Habitat(planet="elyndor", species_pool=species_pool)
         self.wallet = Wallet()
         self.chest = Chest()
         self.price_map = build_price_map(species_pool)
         self.upgrades = UpgradeManager()
         self.album = Album()
+
+        window_state = DEFAULT_STATE
+        always_on_top = True
+        self.welcome_back_message: str | None = None
+
+        save_dict = load_game()
+        if save_dict is not None:
+            elapsed = restore_from_save(
+                save_dict,
+                all_species_by_id(),
+                self.wallet,
+                self.chest,
+                self.habitat,
+                self.album,
+                self.upgrades,
+            )
+            window_state = state_by_name(save_dict.get("window_state", DEFAULT_STATE.name))
+            always_on_top = save_dict.get("always_on_top", True)
+            gold_multiplier = 1.0 + self.upgrades.effect_total(GOLD_PRODUCTION)
+            offline_result = apply_offline_progress(
+                self.habitat, self.wallet, self.chest, self.album, gold_multiplier, elapsed
+            )
+            self.welcome_back_message = self._build_welcome_back_message(offline_result)
+
+        self.window_state = window_state
+        self.surface = pygame.display.set_mode(
+            (self.window_state.width, self.window_state.height)
+        )
+        self.habitat.max_x = self.window_state.width - 20
+        self.clock = pygame.time.Clock()
+        self.running = False
+        self.focused = True
+        self.always_on_top = False
+        self._apply_always_on_top(always_on_top)
 
         self.selected_creature: Creature | None = None
         self.sell_button_rect = pygame.Rect(0, 0, 0, 0)
@@ -78,6 +105,8 @@ class App:
         self.last_sale_feedback_timer = 0.0
         self.last_travel_feedback: str | None = None
         self.last_travel_feedback_timer = 0.0
+        self.welcome_back_timer = 8.0 if self.welcome_back_message else 0.0
+        self.autosave_timer = AUTOSAVE_INTERVAL_SECONDS
 
         # Janela de menu (Tkinter) roda em thread própria; toda troca de
         # dados passa pelo MenuBridge para evitar duas GUIs mexendo no
@@ -87,6 +116,17 @@ class App:
             target=run_menu_window, args=(self.menu_bridge,), daemon=True
         )
         self.menu_thread.start()
+
+    @staticmethod
+    def _build_welcome_back_message(offline_result: dict) -> str | None:
+        if offline_result["elapsed_seconds"] < WELCOME_BACK_MIN_ELAPSED_SECONDS:
+            return None
+        minutes = int(offline_result["elapsed_seconds"] // 60)
+        gold = int(offline_result["gold_gain"])
+        parts = [f"Enquanto você esteve fora ({minutes} min), Homie juntou {gold} ouro"]
+        if offline_result["spawned_names"]:
+            parts.append(f"e encontrou: {', '.join(offline_result['spawned_names'])}")
+        return " ".join(parts) + "!"
 
     def run(self) -> None:
         self.running = True
@@ -270,6 +310,25 @@ class App:
             self.last_sale_feedback_timer = max(0.0, self.last_sale_feedback_timer - dt)
         if self.last_travel_feedback_timer > 0:
             self.last_travel_feedback_timer = max(0.0, self.last_travel_feedback_timer - dt)
+        if self.welcome_back_timer > 0:
+            self.welcome_back_timer = max(0.0, self.welcome_back_timer - dt)
+
+        self.autosave_timer -= dt
+        if self.autosave_timer <= 0:
+            self._save_game()
+            self.autosave_timer = AUTOSAVE_INTERVAL_SECONDS
+
+    def _save_game(self) -> None:
+        save_dict = build_save_dict(
+            self.wallet,
+            self.chest,
+            self.habitat,
+            self.album,
+            self.upgrades,
+            self.window_state.name,
+            self.always_on_top,
+        )
+        save_game(save_dict)
 
     def _render(self) -> None:
         self.surface.fill(BACKGROUND_COLOR)
@@ -280,7 +339,20 @@ class App:
         self._render_menu_button()
         self._render_sell_button()
         self._render_selection_panel()
+        self._render_welcome_back_banner()
         pygame.display.flip()
+
+    def _render_welcome_back_banner(self) -> None:
+        if not self.welcome_back_message or self.welcome_back_timer <= 0:
+            return
+        width, height = self.surface.get_size()
+        font = pygame.font.SysFont("consolas", 13)
+        surf = font.render(self.welcome_back_message, True, (255, 255, 255))
+        banner = pygame.Rect(0, 0, min(surf.get_width() + 24, width - 20), 30)
+        banner.center = (width // 2, min(70, height - 20))
+        pygame.draw.rect(self.surface, (30, 30, 45), banner, border_radius=6)
+        pygame.draw.rect(self.surface, (255, 255, 255), banner, width=1, border_radius=6)
+        self.surface.blit(surf, surf.get_rect(center=banner.center))
 
     def _render_energy_bar(self) -> None:
         width, _ = self.surface.get_size()
@@ -378,6 +450,7 @@ class App:
             self.surface.blit(surf, (panel.x + 8, panel.y + 8 + i * 20))
 
     def quit(self) -> None:
+        self._save_game()
         self.menu_bridge.stop_event.set()
         self.menu_thread.join(timeout=2.0)
         pygame.quit()

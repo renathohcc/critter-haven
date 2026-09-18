@@ -34,7 +34,7 @@ class Habitat:
         # vez de se perder — assim que houver espaço, o spawn acontece na
         # próxima atualização, sem desperdiçar o tempo de espera do jogador.
         if self.energy >= ENERGY_MAX and not self.is_full:
-            spawned = self._spawn()
+            spawned = self.spawn_one()
             self.energy = 0.0
         for creature in self.creatures:
             creature.update(dt, self.min_x, self.max_x)
@@ -43,6 +43,11 @@ class Habitat:
     @property
     def is_full(self) -> bool:
         return len(self.creatures) >= self.max_creatures
+
+    def spawn_one(self) -> Species:
+        """Spawna uma criatura imediatamente (usado pelo update normal e
+        pelo cálculo de progresso offline, que simula spawns represados)."""
+        return self._spawn()
 
     def _spawn(self) -> Species:
         species = roll_species(self.species_pool)
