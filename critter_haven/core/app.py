@@ -4,11 +4,7 @@ from __future__ import annotations
 
 import pygame
 
-from critter_haven.config.window_states import (
-    DEFAULT_HEIGHT,
-    DEFAULT_WIDTH,
-    state_for_height,
-)
+from critter_haven.config.window_states import DEFAULT_STATE, next_state
 from critter_haven.core import window
 from critter_haven.data.species import load_planet
 from critter_haven.economy.chest import Chest
@@ -26,25 +22,30 @@ ENERGY_BAR_COLOR = (255, 214, 92)
 ENERGY_BAR_BG = (40, 40, 40)
 SELL_BUTTON_COLOR = (214, 160, 50)
 SELL_BUTTON_HOVER = (240, 185, 70)
+TOOLBAR_BUTTON_COLOR = (70, 70, 70)
+TOOLBAR_BUTTON_HOVER = (95, 95, 95)
+TOOLBAR_BUTTON_ON_COLOR = (90, 140, 100)
 
 
 class App:
     def __init__(self) -> None:
         pygame.init()
         pygame.display.set_caption("Critter Haven: Homie's Journey")
+        self.window_state = DEFAULT_STATE
         self.surface = pygame.display.set_mode(
-            (DEFAULT_WIDTH, DEFAULT_HEIGHT), pygame.RESIZABLE
+            (self.window_state.width, self.window_state.height)
         )
         self.clock = pygame.time.Clock()
         self.running = False
         self.focused = True
-        self.always_on_top = window.set_always_on_top(True)
+        self.always_on_top = False
+        self._apply_always_on_top(True)
 
         species_pool = load_planet("elyndor")
         self.habitat = Habitat(
             planet="elyndor",
             species_pool=species_pool,
-            max_x=DEFAULT_WIDTH - 20,
+            max_x=self.window_state.width - 20,
         )
         self.wallet = Wallet()
         self.chest = Chest()
@@ -52,6 +53,8 @@ class App:
 
         self.selected_creature: Creature | None = None
         self.sell_button_rect = pygame.Rect(0, 0, 0, 0)
+        self.size_button_rect = pygame.Rect(0, 0, 0, 0)
+        self.pin_button_rect = pygame.Rect(0, 0, 0, 0)
         self.last_sale_feedback: str | None = None
         self.last_sale_feedback_timer = 0.0
 
@@ -67,11 +70,6 @@ class App:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            elif event.type == pygame.VIDEORESIZE:
-                self.surface = pygame.display.set_mode(
-                    (event.w, event.h), pygame.RESIZABLE
-                )
-                self.habitat.max_x = event.w - 20
             elif event.type == pygame.WINDOWFOCUSGAINED:
                 self.focused = True
             elif event.type == pygame.WINDOWFOCUSLOST:
@@ -80,13 +78,33 @@ class App:
                 self._handle_click(event.pos)
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
+        if self.size_button_rect.collidepoint(pos):
+            self._cycle_window_size()
+            return
+        if self.pin_button_rect.collidepoint(pos):
+            self._apply_always_on_top(not self.always_on_top)
+            return
         if self.sell_button_rect.collidepoint(pos):
             self._sell_all()
             return
+
         creature = self.habitat.creature_at(pos[0], pos[1])
         if creature:
             creature.on_click()
             self.selected_creature = creature
+        else:
+            self.selected_creature = None
+
+    def _cycle_window_size(self) -> None:
+        self.window_state = next_state(self.window_state)
+        self.surface = pygame.display.set_mode(
+            (self.window_state.width, self.window_state.height)
+        )
+        self.habitat.max_x = self.window_state.width - 20
+
+    def _apply_always_on_top(self, enabled: bool) -> None:
+        window.set_always_on_top(enabled)
+        self.always_on_top = enabled
 
     def _sell_all(self) -> None:
         if self.chest.total_count() == 0:
@@ -109,9 +127,9 @@ class App:
         for creature in self.habitat.creatures:
             draw_creature(self.surface, creature)
         self._render_hud()
+        self._render_toolbar()
         self._render_sell_button()
         self._render_selection_panel()
-        self._render_debug_overlay()
         pygame.display.flip()
 
     def _render_energy_bar(self) -> None:
@@ -143,6 +161,47 @@ class App:
             self.surface.blit(
                 feedback_surf, (width - feedback_surf.get_width() - 16, 50)
             )
+
+    def _render_toolbar(self) -> None:
+        font = pygame.font.SysFont("consolas", 12, bold=True)
+        mouse_pos = pygame.mouse.get_pos()
+
+        self.size_button_rect = pygame.Rect(12, 28, 90, 22)
+        self._draw_toolbar_button(
+            self.size_button_rect,
+            f"Tamanho: {self.window_state.name}",
+            font,
+            mouse_pos,
+            active=False,
+        )
+
+        self.pin_button_rect = pygame.Rect(110, 28, 90, 22)
+        self._draw_toolbar_button(
+            self.pin_button_rect,
+            f"Fixar: {'ON' if self.always_on_top else 'OFF'}",
+            font,
+            mouse_pos,
+            active=self.always_on_top,
+        )
+
+    def _draw_toolbar_button(
+        self,
+        rect: pygame.Rect,
+        label: str,
+        font: pygame.font.Font,
+        mouse_pos: tuple[int, int],
+        active: bool,
+    ) -> None:
+        if active:
+            color = TOOLBAR_BUTTON_ON_COLOR
+        elif rect.collidepoint(mouse_pos):
+            color = TOOLBAR_BUTTON_HOVER
+        else:
+            color = TOOLBAR_BUTTON_COLOR
+        pygame.draw.rect(self.surface, color, rect, border_radius=4)
+        text = font.render(label, True, (255, 255, 255))
+        text_rect = text.get_rect(center=rect.center)
+        self.surface.blit(text, text_rect)
 
     def _render_sell_button(self) -> None:
         width, height = self.surface.get_size()
@@ -184,20 +243,6 @@ class App:
         for i, line in enumerate(lines):
             surf = font.render(line, True, (255, 255, 255))
             self.surface.blit(surf, (panel.x + 8, panel.y + 8 + i * 20))
-
-    def _render_debug_overlay(self) -> None:
-        width, height = self.surface.get_size()
-        state = state_for_height(height)
-        font = pygame.font.SysFont("consolas", 16)
-        lines = [
-            "Critter Haven - Fase 3 (economia e producao)",
-            f"janela: {width}x{height}  estado UI: {state.name}",
-            f"criaturas: {len(self.habitat.creatures)}/{self.habitat.max_creatures}"
-            f"  FPS: {self.clock.get_fps():.0f}",
-        ]
-        for i, line in enumerate(lines):
-            surf = font.render(line, True, (255, 255, 255))
-            self.surface.blit(surf, (12, 30 + i * 20))
 
     def quit(self) -> None:
         pygame.quit()
