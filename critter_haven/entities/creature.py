@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, field
 
+from critter_haven.config.economy import ITEM_INTERVAL_BY_RARITY
 from critter_haven.data.species import Species
 
 WANDER_SPEED = 18.0  # pixels/segundo
@@ -19,6 +20,12 @@ class Creature:
     direction: int = 1
     move_timer: float = 0.0
     click_feedback_timer: float = 0.0
+    item_timer: float = field(default=0.0)
+    item_feedback_timer: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.item_timer <= 0:
+            self.item_timer = ITEM_INTERVAL_BY_RARITY[self.species.rarity]
 
     @property
     def rarity(self) -> str:
@@ -44,9 +51,23 @@ class Creature:
 
         if self.click_feedback_timer > 0:
             self.click_feedback_timer = max(0.0, self.click_feedback_timer - dt)
+        if self.item_feedback_timer > 0:
+            self.item_feedback_timer = max(0.0, self.item_feedback_timer - dt)
 
     def on_click(self) -> None:
         self.click_feedback_timer = CLICK_FEEDBACK_DURATION
 
     def is_clicked_feedback_active(self) -> bool:
         return self.click_feedback_timer > 0
+
+    def tick_item_production(self, dt: float) -> bool:
+        """Retorna True quando a criatura solta um item nesta atualização."""
+        self.item_timer -= dt
+        if self.item_timer > 0:
+            return False
+        self.item_timer += ITEM_INTERVAL_BY_RARITY[self.species.rarity]
+        self.item_feedback_timer = CLICK_FEEDBACK_DURATION
+        return True
+
+    def is_item_feedback_active(self) -> bool:
+        return self.item_feedback_timer > 0
