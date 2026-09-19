@@ -12,7 +12,7 @@ WANDER_SPEED = 18.0  # pixels/segundo
 CLICK_FEEDBACK_DURATION = 0.4
 
 
-@dataclass
+@dataclass(eq=False)
 class Creature:
     species: Species
     x: float

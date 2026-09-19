@@ -157,7 +157,7 @@ class App:
             self._process_menu_commands()
             self._update(dt)
             self._publish_menu_snapshot()
-            self._render()
+            self._render(dt)
 
     def _refresh_focus_state(self) -> None:
         # window.is_foreground() (checagem direta via win32) é mais confiável
@@ -374,11 +374,11 @@ class App:
         )
         save_game(save_dict)
 
-    def _render(self) -> None:
+    def _render(self, dt: float = 0.0) -> None:
         self.surface.fill(BACKGROUND_COLOR)
         self._render_energy_bar()
         for creature in self.habitat.creatures:
-            draw_creature(self.surface, creature)
+            draw_creature(self.surface, creature, dt)
         self._render_hud()
         self._render_menu_button()
         self._render_sell_button()

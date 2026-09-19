@@ -1,0 +1,33 @@
+{
+  "frame_size": [
+    48,
+    48
+  ],
+  "states": {
+    "idle": {
+      "frames": [
+        0,
+        1,
+        2
+      ],
+      "fps": 3,
+      "loop": true
+    },
+    "walk": {
+      "frames": [
+        3,
+        4
+      ],
+      "fps": 5,
+      "loop": true
+    },
+    "click": {
+      "frames": [
+        5,
+        6
+      ],
+      "fps": 8,
+      "loop": false
+    }
+  }
+}
