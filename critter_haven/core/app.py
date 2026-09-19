@@ -31,6 +31,7 @@ from critter_haven.entities.habitat import Habitat
 from critter_haven.entities.creature import Creature
 from critter_haven.persistence.save_file import load_game, save_game
 from critter_haven.persistence.serializer import build_save_dict, restore_from_save
+from critter_haven.render.background import get_background
 from critter_haven.render.creature_render import draw_creature
 from critter_haven.render.fonts import get_font
 from critter_haven.systems.offline_progress import apply_offline_progress
@@ -375,7 +376,12 @@ class App:
         save_game(save_dict)
 
     def _render(self, dt: float = 0.0) -> None:
-        self.surface.fill(BACKGROUND_COLOR)
+        width, height = self.surface.get_size()
+        background = get_background(self.habitat.planet, width, height)
+        if background is not None:
+            self.surface.blit(background, (0, 0))
+        else:
+            self.surface.fill(BACKGROUND_COLOR)
         self._render_energy_bar()
         for creature in self.habitat.creatures:
             draw_creature(self.surface, creature, dt)
