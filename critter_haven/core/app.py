@@ -38,6 +38,7 @@ from critter_haven.render.background import (
 )
 from critter_haven.render.creature_render import draw_creature
 from critter_haven.render.fonts import get_font
+from critter_haven.render.tilemap import TileMap, load_map
 from critter_haven.systems.offline_progress import apply_offline_progress
 from critter_haven.systems.production_system import update_production
 from critter_haven.systems.travel_system import can_travel, travel
@@ -66,6 +67,8 @@ class App:
 
         species_pool = load_planet("elyndor")
         self.habitat = Habitat(planet="elyndor", species_pool=species_pool)
+        self._composed_background: dict[tuple[int, int], pygame.Surface] = {}
+        self._composed_ground_y: dict[tuple[int, int], int] = {}
         self.wallet = Wallet()
         self.chest = Chest()
         self.price_map = build_price_map(species_pool)
@@ -108,6 +111,10 @@ class App:
         self.surface = pygame.display.set_mode(
             (self.window_state.width, self.window_state.height)
         )
+        # pytmx converte imagens (Surface.convert()) ao carregar, o que
+        # exige um display já criado -- por isso o mapa só é carregado
+        # depois do set_mode acima, não antes.
+        self.tile_map: TileMap | None = load_map("elyndor", "Elyndor.tmx")
         self._sync_habitat_bounds()
         self.clock = pygame.time.Clock()
         self.running = False
@@ -336,10 +343,21 @@ class App:
 
     def _sync_habitat_bounds(self) -> None:
         self.habitat.max_x = self.window_state.width - 20
-        # criaturas devem ficar de pe na faixa de chao do background, nao
-        # numa altura fixa arbitraria (bug exposto ao adicionar o chao
-        # texturizado com profundidade)
-        self.habitat.spawn_y = self.window_state.height - GROUND_BAND_HEIGHT
+        width, height = self.window_state.width, self.window_state.height
+
+        if self.tile_map is not None:
+            key = (width, height)
+            if key not in self._composed_background:
+                surface, ground_y = self.tile_map.compose_for_window(width, height)
+                self._composed_background[key] = surface
+                self._composed_ground_y[key] = ground_y
+            self.habitat.spawn_y = self._composed_ground_y[key]
+        else:
+            # criaturas devem ficar de pe na faixa de chao do background,
+            # nao numa altura fixa arbitraria (bug exposto ao adicionar o
+            # chao texturizado com profundidade)
+            self.habitat.spawn_y = height - GROUND_BAND_HEIGHT
+
         for creature in self.habitat.creatures:
             creature.y = self.habitat.spawn_y
 
@@ -390,16 +408,22 @@ class App:
 
     def _render(self, dt: float = 0.0) -> None:
         width, height = self.surface.get_size()
-        background = get_background(self.habitat.planet, width, height)
-        if background is not None:
-            self.surface.blit(background, (0, 0))
+        if self.tile_map is not None:
+            self.surface.blit(self._composed_background[(width, height)], (0, 0))
         else:
-            self.surface.fill(BACKGROUND_COLOR)
+            background = get_background(self.habitat.planet, width, height)
+            if background is not None:
+                self.surface.blit(background, (0, 0))
+            else:
+                self.surface.fill(BACKGROUND_COLOR)
         self._render_energy_bar()
         for creature in self.habitat.creatures:
             draw_creature(self.surface, creature, dt)
-        for decor_surface, decor_pos in get_foreground_decor(self.habitat.planet, width, height):
-            self.surface.blit(decor_surface, decor_pos)
+        if self.tile_map is None:
+            for decor_surface, decor_pos in get_foreground_decor(
+                self.habitat.planet, width, height
+            ):
+                self.surface.blit(decor_surface, decor_pos)
         self._render_hud()
         self._render_menu_button()
         self._render_sell_button()

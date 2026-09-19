@@ -94,6 +94,48 @@ class TileMap:
             if image is not None:
                 target.blit(image, (offset[0] + x * tw, offset[1] + y * th))
 
+    def ground_line_y(self, layer_name: str = "Floor") -> int:
+        """Y (em pixels do mapa) da linha mais alta com tile na camada de
+        chão — é onde os pés das criaturas devem encostar. Cai pro fundo
+        do mapa se a camada não existir ou estiver vazia."""
+        try:
+            layer = self.tmx_data.get_layer_by_name(layer_name)
+        except ValueError:
+            return self.pixel_height
+        rows_with_tiles = [y for _x, y, gid in layer.iter_data() if gid != 0]
+        if not rows_with_tiles:
+            return self.pixel_height
+        return min(rows_with_tiles) * self.tmx_data.tileheight
+
+    def compose_for_window(
+        self,
+        width: int,
+        height: int,
+        ground_layer: str = "Floor",
+        ground_margin: int = 24,
+    ) -> tuple[pygame.Surface, int]:
+        """Recorte ancorado na LINHA DO CHÃO (não no fundo do mapa — o mapa
+        tem terra/subsolo desenhado abaixo da grama, então ancorar no fundo
+        do mapa mostraria um corte subterrâneo nos estados mais baixos).
+        `ground_margin` é quanto de terra sobra visível abaixo da grama.
+        Corta o céu primeiro conforme a janela fica mais baixa. Retorna a
+        imagem recortada e a posição em Y (na janela) onde os pés das
+        criaturas devem ficar."""
+        map_w, map_h = self.pixel_width, self.pixel_height
+        scale = width / map_w
+        new_w, new_h = width, max(1, round(map_h * scale))
+        scaled = pygame.transform.smoothscale(self._base_surface, (new_w, new_h))
+
+        scaled_ground_y = round(self.ground_line_y(ground_layer) * scale)
+        crop_top = scaled_ground_y - (height - ground_margin)
+        crop_top = max(0, min(crop_top, max(0, new_h - height)))
+
+        cropped = pygame.Surface((width, height), pygame.SRCALPHA)
+        cropped.blit(scaled, (0, -crop_top))
+
+        window_ground_y = scaled_ground_y - crop_top
+        return cropped, window_ground_y
+
     def object_positions(self, layer_name: str) -> list[dict]:
         """Objetos soltos de uma Object Layer do Tiled (nome, x, y, etc)."""
         try:
