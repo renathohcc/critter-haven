@@ -3,14 +3,11 @@ espécie já tiver assets em assets/creatures/; caso contrário cai no
 placeholder geométrico — permite trocar espécie por espécie sem quebrar
 as demais nem tocar em lógica de jogo.
 
-"Respirar" (leve pulso de escala) e o flash de clique são efeitos
-aplicados por código em cima do sprite, não frames de arte — dá vida
-ao personagem sem precisar gerar mais quadros na IA para cada espécie.
-"""
+A animação (respiração, caminhada, carinho, soltar item) vem dos frames
+do próprio sprite. O placeholder geométrico não tem frames, então segue
+estático."""
 
 from __future__ import annotations
-
-import math
 
 import pygame
 
@@ -20,8 +17,6 @@ from critter_haven.render.fonts import get_font
 from critter_haven.render.spritesheet import load_creature_sheet
 
 RADIUS = 20
-BREATH_PERIOD_SECONDS = 2.6
-BREATH_AMPLITUDE = 0.05
 
 _SPECIES_COLOR = {
     "mossnib": (107, 142, 74),
@@ -39,6 +34,10 @@ _RARITY_RING = {
 
 
 def _animation_state_for(creature: Creature, sheet) -> str:
+    if creature.is_clicked_feedback_active() and sheet.has_state("click"):
+        return "click"
+    if creature.is_item_feedback_active() and sheet.has_state("item"):
+        return "item"
     if creature.is_walking:
         desired = "walk_left" if creature.direction < 0 else "walk_right"
         if sheet.has_state(desired):
@@ -47,15 +46,8 @@ def _animation_state_for(creature: Creature, sheet) -> str:
             return "walk"
     if sheet.has_state("idle"):
         return "idle"
-    # sem pose de descanso ainda: usa a última direção conhecida como fallback
     fallback = "walk_left" if creature.direction < 0 else "walk_right"
     return fallback if sheet.has_state(fallback) else next(iter(sheet.states))
-
-
-def _breathing_scale(creature: Creature) -> float:
-    phase = pygame.time.get_ticks() / 1000.0 / BREATH_PERIOD_SECONDS * (2 * math.pi)
-    phase += (id(creature) % 1000) * 0.01  # dessincroniza criaturas iguais
-    return 1.0 + BREATH_AMPLITUDE * math.sin(phase)
 
 
 def draw_creature(surface: pygame.Surface, creature: Creature, dt: float = 0.0) -> None:
@@ -63,28 +55,22 @@ def draw_creature(surface: pygame.Surface, creature: Creature, dt: float = 0.0) 
     sheet = load_creature_sheet(creature.species.id)
 
     if sheet is not None:
-        state = _animation_state_for(creature, sheet)
-        frame = current_frame(creature, sheet, state, dt)
-        scale = _breathing_scale(creature)
-        if scale != 1.0:
-            w, h = frame.get_size()
-            frame = pygame.transform.smoothscale(
-                frame, (max(1, round(w * scale)), max(1, round(h * scale)))
-            )
-        rect = frame.get_rect(center=pos)
-        if creature.is_clicked_feedback_active():
-            pygame.draw.circle(surface, (255, 255, 255), pos, RADIUS + 6, width=2)
-        surface.blit(frame, rect)
+        frame = current_frame(creature, sheet, _animation_state_for(creature, sheet), dt)
+        surface.blit(frame, frame.get_rect(center=pos))
+        half_height = sheet.frame_height // 2
+        ring_radius = sheet.frame_width // 2 - 2
     else:
         _draw_placeholder(surface, creature, pos)
+        half_height = RADIUS
+        ring_radius = RADIUS + 3
 
     ring_color = _RARITY_RING.get(creature.rarity)
     if ring_color:
-        pygame.draw.circle(surface, ring_color, pos, RADIUS + 3, width=3)
+        pygame.draw.circle(surface, ring_color, pos, ring_radius, width=3)
 
     font = get_font("consolas", 12)
     label = font.render(creature.species.name, True, (255, 255, 255))
-    surface.blit(label, (pos[0] - label.get_width() // 2, pos[1] + RADIUS + 4))
+    surface.blit(label, (pos[0] - label.get_width() // 2, pos[1] + half_height - 4))
 
 
 def _draw_placeholder(

@@ -9,7 +9,13 @@ from critter_haven.config.economy import ITEM_INTERVAL_BY_RARITY
 from critter_haven.data.species import Species
 
 WANDER_SPEED = 14.0  # pixels/segundo, só durante a rajada de caminhada
-CLICK_FEEDBACK_DURATION = 0.4
+
+# Duração do feedback de clique: precisa ser >= duração da animação de
+# carinho do sprite (9 frames a 8fps = 1.125s), senão o estado "click"
+# encerra antes da animação terminar e os corações nunca aparecem na
+# tela — bug relatado pelo dev.
+CLICK_FEEDBACK_DURATION = 1.2
+ITEM_FEEDBACK_DURATION = 0.4
 
 # A criatura passa a maior parte do tempo parada "descansando" (de frente,
 # respirando) e só de vez em quando dá uma rajada curta de caminhada antes
@@ -80,7 +86,7 @@ class Creature:
         if self.item_timer > 0:
             return False
         self.item_timer += ITEM_INTERVAL_BY_RARITY[self.species.rarity]
-        self.item_feedback_timer = CLICK_FEEDBACK_DURATION
+        self.item_feedback_timer = ITEM_FEEDBACK_DURATION
         return True
 
     def is_item_feedback_active(self) -> bool:

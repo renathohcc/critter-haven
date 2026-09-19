@@ -20,6 +20,7 @@ class SpriteSheet:
         self.frame_width, self.frame_height = meta["frame_size"]
         self.states: dict = meta["states"]
         self._frame_cache: dict[int, pygame.Surface] = {}
+        self._state_frames_cache: dict[str, list[pygame.Surface]] = {}
 
     def frame(self, index: int) -> pygame.Surface:
         cached = self._frame_cache.get(index)
@@ -32,7 +33,14 @@ class SpriteSheet:
         return cached
 
     def state_frames(self, state: str) -> list[pygame.Surface]:
-        return [self.frame(i) for i in self.states[state]["frames"]]
+        # Cacheado porque é chamado a cada frame renderizado, por criatura —
+        # sem isso, reconstruíamos essa lista dezenas de vezes por segundo
+        # à toa (custo suspeito da queda de FPS ao andar, GDD/playtest).
+        cached = self._state_frames_cache.get(state)
+        if cached is None:
+            cached = [self.frame(i) for i in self.states[state]["frames"]]
+            self._state_frames_cache[state] = cached
+        return cached
 
     def state_fps(self, state: str) -> float:
         return self.states[state].get("fps", 6.0)

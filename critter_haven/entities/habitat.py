@@ -59,7 +59,7 @@ class Habitat:
     def energy_ratio(self) -> float:
         return self.energy / ENERGY_MAX
 
-    def creature_at(self, x: float, y: float, radius: float = 24.0) -> Creature | None:
+    def creature_at(self, x: float, y: float, radius: float = 28.0) -> Creature | None:
         for creature in reversed(self.creatures):
             if (creature.x - x) ** 2 + (creature.y - y) ** 2 <= radius**2:
                 return creature
