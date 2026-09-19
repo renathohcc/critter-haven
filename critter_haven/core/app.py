@@ -31,7 +31,11 @@ from critter_haven.entities.habitat import Habitat
 from critter_haven.entities.creature import Creature
 from critter_haven.persistence.save_file import load_game, save_game
 from critter_haven.persistence.serializer import build_save_dict, restore_from_save
-from critter_haven.render.background import get_background
+from critter_haven.render.background import (
+    GROUND_BAND_HEIGHT,
+    get_background,
+    get_foreground_decor,
+)
 from critter_haven.render.creature_render import draw_creature
 from critter_haven.render.fonts import get_font
 from critter_haven.systems.offline_progress import apply_offline_progress
@@ -104,7 +108,7 @@ class App:
         self.surface = pygame.display.set_mode(
             (self.window_state.width, self.window_state.height)
         )
-        self.habitat.max_x = self.window_state.width - 20
+        self._sync_habitat_bounds()
         self.clock = pygame.time.Clock()
         self.running = False
         self.focused = True
@@ -328,7 +332,17 @@ class App:
         self.surface = pygame.display.set_mode(
             (self.window_state.width, self.window_state.height)
         )
+        self._sync_habitat_bounds()
+
+    def _sync_habitat_bounds(self) -> None:
         self.habitat.max_x = self.window_state.width - 20
+        # criaturas devem ficar de pe na faixa de chao do background, nao
+        # numa altura fixa arbitraria (bug exposto ao adicionar o chao
+        # texturizado com profundidade)
+        ground_y = self.window_state.height - GROUND_BAND_HEIGHT
+        self.habitat.spawn_y = ground_y - 28
+        for creature in self.habitat.creatures:
+            creature.y = self.habitat.spawn_y
 
     def _apply_always_on_top(self, enabled: bool) -> None:
         window.set_always_on_top(enabled)
@@ -385,6 +399,8 @@ class App:
         self._render_energy_bar()
         for creature in self.habitat.creatures:
             draw_creature(self.surface, creature, dt)
+        for decor_surface, decor_pos in get_foreground_decor(self.habitat.planet, width, height):
+            self.surface.blit(decor_surface, decor_pos)
         self._render_hud()
         self._render_menu_button()
         self._render_sell_button()
