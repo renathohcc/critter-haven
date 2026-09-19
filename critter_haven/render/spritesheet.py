@@ -21,6 +21,7 @@ class SpriteSheet:
         self.states: dict = meta["states"]
         self._frame_cache: dict[int, pygame.Surface] = {}
         self._state_frames_cache: dict[str, list[pygame.Surface]] = {}
+        self._ground_offset: int | None = None
 
     def frame(self, index: int) -> pygame.Surface:
         cached = self._frame_cache.get(index)
@@ -50,6 +51,22 @@ class SpriteSheet:
 
     def has_state(self, state: str) -> bool:
         return state in self.states
+
+    @property
+    def ground_offset(self) -> int:
+        """Distância entre a base do canvas e os pés de verdade do
+        personagem (pixel não-transparente mais baixo). Os GIFs do
+        PixelLab deixam uma margem embaixo (espaço pro pulo do clique,
+        etc.) — sem compensar isso, o sprite ancorado pelo canvas inteiro
+        fica "flutuando" acima do chão (bug relatado pelo dev)."""
+        if self._ground_offset is None:
+            state = "idle" if self.has_state("idle") else next(iter(self.states))
+            frame = self.state_frames(state)[0]
+            mask = pygame.mask.from_surface(frame)
+            rects = mask.get_bounding_rects()
+            content_bottom = max((r.bottom for r in rects), default=self.frame_height)
+            self._ground_offset = self.frame_height - content_bottom
+        return self._ground_offset
 
 
 _sheet_cache: dict[str, SpriteSheet | None] = {}

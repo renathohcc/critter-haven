@@ -3,9 +3,10 @@ espécie já tiver assets em assets/creatures/; caso contrário cai no
 placeholder geométrico — permite trocar espécie por espécie sem quebrar
 as demais nem tocar em lógica de jogo.
 
-A animação (respiração, caminhada, carinho, soltar item) vem dos frames
-do próprio sprite. O placeholder geométrico não tem frames, então segue
-estático."""
+`creature.x/creature.y` representam onde os PÉS da criatura tocam o chão
+(não o centro do sprite) — necessário pra alinhar com a linha de chão do
+background em qualquer tamanho de janela.
+"""
 
 from __future__ import annotations
 
@@ -51,34 +52,40 @@ def _animation_state_for(creature: Creature, sheet) -> str:
 
 
 def draw_creature(surface: pygame.Surface, creature: Creature, dt: float = 0.0) -> None:
-    pos = (int(creature.x), int(creature.y))
+    feet = (int(creature.x), int(creature.y))
     sheet = load_creature_sheet(creature.species.id)
 
     if sheet is not None:
         frame = current_frame(creature, sheet, _animation_state_for(creature, sheet), dt)
-        surface.blit(frame, frame.get_rect(center=pos))
-        half_height = sheet.frame_height // 2
+        # o canvas do sprite tem uma margem invisivel embaixo dos pes (pro
+        # pulo do clique etc.) -- empurra o sprite pra baixo por essa
+        # margem, senao os pes visiveis ficam flutuando acima da linha do
+        # chao (bug relatado pelo dev).
+        anchor = (feet[0], feet[1] + sheet.ground_offset)
+        rect = frame.get_rect(midbottom=anchor)
+        surface.blit(frame, rect)
+        center = rect.center
         ring_radius = sheet.frame_width // 2 - 2
     else:
-        _draw_placeholder(surface, creature, pos)
-        half_height = RADIUS
+        center = (feet[0], feet[1] - RADIUS)
+        _draw_placeholder(surface, creature, center)
         ring_radius = RADIUS + 3
 
     ring_color = _RARITY_RING.get(creature.rarity)
     if ring_color:
-        pygame.draw.circle(surface, ring_color, pos, ring_radius, width=3)
+        pygame.draw.circle(surface, ring_color, center, ring_radius, width=3)
 
     font = get_font("consolas", 12)
     label = font.render(creature.species.name, True, (255, 255, 255))
-    surface.blit(label, (pos[0] - label.get_width() // 2, pos[1] + half_height - 4))
+    surface.blit(label, (feet[0] - label.get_width() // 2, feet[1] + 2))
 
 
 def _draw_placeholder(
-    surface: pygame.Surface, creature: Creature, pos: tuple[int, int]
+    surface: pygame.Surface, creature: Creature, center: tuple[int, int]
 ) -> None:
     color = _SPECIES_COLOR.get(creature.species.id, (200, 200, 200))
 
     if creature.is_clicked_feedback_active():
-        pygame.draw.circle(surface, (255, 255, 255), pos, RADIUS + 6, width=2)
+        pygame.draw.circle(surface, (255, 255, 255), center, RADIUS + 6, width=2)
 
-    pygame.draw.circle(surface, color, pos, RADIUS)
+    pygame.draw.circle(surface, color, center, RADIUS)

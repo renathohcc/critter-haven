@@ -339,8 +339,7 @@ class App:
         # criaturas devem ficar de pe na faixa de chao do background, nao
         # numa altura fixa arbitraria (bug exposto ao adicionar o chao
         # texturizado com profundidade)
-        ground_y = self.window_state.height - GROUND_BAND_HEIGHT
-        self.habitat.spawn_y = ground_y - 28
+        self.habitat.spawn_y = self.window_state.height - GROUND_BAND_HEIGHT
         for creature in self.habitat.creatures:
             creature.y = self.habitat.spawn_y
 
