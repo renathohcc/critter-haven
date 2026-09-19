@@ -3,7 +3,7 @@ em conversa com o dev — ajustáveis aqui sem tocar no sistema."""
 
 from dataclasses import dataclass
 
-COST_GROWTH = 1.15
+COST_GROWTH = 1.28  # ajustado na Fase 8: 1.15 esgotava todos os upgrades em ~1h de simulação
 
 
 @dataclass(frozen=True)

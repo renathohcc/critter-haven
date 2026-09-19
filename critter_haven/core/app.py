@@ -112,6 +112,7 @@ class App:
 
         self.selected_creature: Creature | None = None
         self.sell_button_rect = pygame.Rect(0, 0, 0, 0)
+        self.sacrifice_button_rect = pygame.Rect(0, 0, 0, 0)
         self.menu_button_rect = pygame.Rect(0, 0, 0, 0)
         self.last_sale_feedback: str | None = None
         self.last_sale_feedback_timer = 0.0
@@ -187,6 +188,9 @@ class App:
         if self.sell_button_rect.collidepoint(pos):
             self._sell_all()
             return
+        if self.sacrifice_button_rect.collidepoint(pos) and self.selected_creature:
+            self._sacrifice_duplicate(self.selected_creature.species.id)
+            return
 
         creature = self.habitat.creature_at(pos[0], pos[1])
         if creature:
@@ -194,6 +198,15 @@ class App:
             self.selected_creature = creature
         else:
             self.selected_creature = None
+
+    def _sacrifice_duplicate(self, species_id: str) -> None:
+        spawned = self.habitat.sacrifice_duplicate_and_spawn(species_id)
+        if spawned is None:
+            return
+        self.album.register(spawned)
+        self.selected_creature = None
+        self.last_sale_feedback = f"Nova criatura sorteada: {spawned.name}!"
+        self.last_sale_feedback_timer = 2.5
 
     def _process_menu_commands(self) -> None:
         for name, payload in self.menu_bridge.drain_commands():
@@ -462,23 +475,44 @@ class App:
         self.surface.blit(label, label_pos)
 
     def _render_selection_panel(self) -> None:
+        self.sacrifice_button_rect = pygame.Rect(0, 0, 0, 0)
         if not self.selected_creature:
             return
         width, height = self.surface.get_size()
         species = self.selected_creature.species
+        has_duplicate = self.habitat.has_duplicate(species.id)
         font = get_font("consolas", 14)
         lines = [
             f"{species.name} ({species.rarity})",
             f"Produção: {species.base_gold_per_second} ouro/s",
             f"Item: {species.item_name} ({self.price_map[species.item_name]:.0f} ouro/un.)",
         ]
-        panel_height = 20 * len(lines) + 10
+        panel_height = 20 * len(lines) + 10 + (30 if has_duplicate else 0)
         panel = pygame.Rect(10, height - panel_height - 10, min(340, width - 20), panel_height)
         pygame.draw.rect(self.surface, (20, 20, 20), panel)
         pygame.draw.rect(self.surface, (255, 255, 255), panel, width=1)
         for i, line in enumerate(lines):
             surf = font.render(line, True, (255, 255, 255))
             self.surface.blit(surf, (panel.x + 8, panel.y + 8 + i * 20))
+
+        if has_duplicate:
+            self.sacrifice_button_rect = pygame.Rect(
+                panel.x + 8, panel.y + 8 + len(lines) * 20, panel.width - 16, 24
+            )
+            mouse_pos = pygame.mouse.get_pos()
+            color = (
+                SELL_BUTTON_HOVER
+                if self.sacrifice_button_rect.collidepoint(mouse_pos)
+                else SELL_BUTTON_COLOR
+            )
+            pygame.draw.rect(self.surface, color, self.sacrifice_button_rect, border_radius=4)
+            btn_font = get_font("consolas", 12, bold=True)
+            btn_label = btn_font.render(
+                "Usar duplicata p/ sortear nova", True, (30, 20, 0)
+            )
+            self.surface.blit(
+                btn_label, btn_label.get_rect(center=self.sacrifice_button_rect.center)
+            )
 
     def quit(self) -> None:
         self._save_game()

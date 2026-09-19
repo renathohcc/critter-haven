@@ -64,3 +64,33 @@ class Habitat:
             if (creature.x - x) ** 2 + (creature.y - y) ** 2 <= radius**2:
                 return creature
         return None
+
+    def count_of(self, species_id: str) -> int:
+        return sum(1 for c in self.creatures if c.species.id == species_id)
+
+    def has_duplicate(self, species_id: str) -> bool:
+        return self.count_of(species_id) >= 2
+
+    def release_duplicate(self, species_id: str) -> bool:
+        """Remove uma criatura duplicada (mantendo ao menos uma da espécie)
+        para abrir espaço no habitat. Retorna False se não há duplicata."""
+        if not self.has_duplicate(species_id):
+            return False
+        for i, creature in enumerate(self.creatures):
+            if creature.species.id == species_id:
+                del self.creatures[i]
+                return True
+        return False
+
+    def sacrifice_duplicate_and_spawn(self, species_id: str) -> Species | None:
+        """Usa uma criatura duplicada como recurso: libera espaço e sorteia
+        uma nova criatura na hora, sem esperar a energia encher.
+
+        Resolve o problema de descoberta travada pela capacidade do habitat
+        — decisão de balanceamento tomada com o dev (Fase 8): em vez de
+        aumentar infinitamente a capacidade, duplicatas viram um recurso
+        de progressão que o jogador já acumula naturalmente jogando.
+        """
+        if not self.release_duplicate(species_id):
+            return None
+        return self.spawn_one()
