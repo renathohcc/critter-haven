@@ -1,8 +1,13 @@
 """Monta spritesheet+JSON a partir de GIFs de animação exportados pelo
 PixelLab (um GIF por estado/direção, já com transparência).
 
-Uso: edite o dicionário ANIMATIONS abaixo apontando pros GIFs certos e
-rode. Cada entrada vira um "estado" no JSON (idle, walk_left, ...).
+Animações diferentes às vezes vêm em canvas de tamanho ligeiramente
+diferente (ex: idle 64x64, walk 60x60) — em vez de re-escalar (o que
+borra pixel art), completamos com transparência até o maior tamanho,
+centralizado, preservando os pixels originais intactos.
+
+Uso: chame assemble() com o dicionário de animações, ou edite o bloco
+no fim do arquivo e rode `python scripts/assemble_pixellab_animations.py <pasta>`.
 """
 
 from __future__ import annotations
@@ -22,18 +27,28 @@ def gif_frames(path: Path) -> list[Image.Image]:
     return [frame.convert("RGBA").copy() for frame in ImageSequence.Iterator(img)]
 
 
+def _pad_to(frame: Image.Image, target_w: int, target_h: int) -> Image.Image:
+    if frame.size == (target_w, target_h):
+        return frame
+    canvas = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
+    x = (target_w - frame.width) // 2
+    y = (target_h - frame.height) // 2
+    canvas.paste(frame, (x, y), frame)
+    return canvas
+
+
 def assemble(species_id: str, animations: dict[str, tuple[Path, bool]]) -> None:
+    raw: dict[str, list[Image.Image]] = {
+        state: gif_frames(gif_path) for state, (gif_path, _loop) in animations.items()
+    }
+
+    frame_w = max(f.width for frames in raw.values() for f in frames)
+    frame_h = max(f.height for frames in raw.values() for f in frames)
+
     all_frames: list[Image.Image] = []
     states: dict[str, dict] = {}
-    frame_w = frame_h = None
-
-    for state_name, (gif_path, loop) in animations.items():
-        frames = gif_frames(gif_path)
-        if frame_w is None:
-            frame_w, frame_h = frames[0].size
-        elif frames[0].size != (frame_w, frame_h):
-            raise ValueError(f"{gif_path} tem tamanho diferente dos demais")
-
+    for state_name, (_gif_path, loop) in animations.items():
+        frames = [_pad_to(f, frame_w, frame_h) for f in raw[state_name]]
         start = len(all_frames)
         all_frames.extend(frames)
         states[state_name] = {
@@ -52,18 +67,18 @@ def assemble(species_id: str, animations: dict[str, tuple[Path, bool]]) -> None:
         json.dumps({"frame_size": [frame_w, frame_h], "states": states}, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
-    print(f"{species_id}: {len(all_frames)} frames, estados={list(states.keys())}")
+    print(f"{species_id}: {len(all_frames)} frames ({frame_w}x{frame_h}), estados={list(states.keys())}")
 
 
 if __name__ == "__main__":
     IMAGES_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(".")
 
     assemble(
-        "mossnib",
+        "pebblit",
         {
-            "idle": (IMAGES_DIR / "22.gif", True),         # grupo2, frente
-            "walk_left": (IMAGES_DIR / "23.gif", True),    # grupo3, esquerda
-            "walk_right": (IMAGES_DIR / "25.gif", True),   # grupo3, direita
-            "click": (IMAGES_DIR / "18.gif", False),       # grupo1, frente
+            "idle": (IMAGES_DIR / "33.gif", True),
+            "walk_left": (IMAGES_DIR / "29.gif", True),
+            "walk_right": (IMAGES_DIR / "31.gif", True),
+            "click": (IMAGES_DIR / "28.gif", False),
         },
     )
