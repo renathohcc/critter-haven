@@ -7,6 +7,7 @@ from __future__ import annotations
 import pygame
 
 from critter_haven.entities.creature import Creature
+from critter_haven.render.fonts import get_font
 
 RADIUS = 20
 
@@ -38,6 +39,6 @@ def draw_creature(surface: pygame.Surface, creature: Creature) -> None:
     if ring_color:
         pygame.draw.circle(surface, ring_color, pos, RADIUS + 3, width=3)
 
-    font = pygame.font.SysFont("consolas", 12)
+    font = get_font("consolas", 12)
     label = font.render(creature.species.name, True, (255, 255, 255))
     surface.blit(label, (pos[0] - label.get_width() // 2, pos[1] + RADIUS + 4))

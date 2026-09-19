@@ -45,3 +45,19 @@ def set_always_on_top(enabled: bool) -> bool:
 
 def is_supported() -> bool:
     return _SUPPORTED
+
+
+def is_foreground() -> bool | None:
+    """Se a janela do jogo é a janela ativa do Windows no momento.
+
+    Mais confiável que os eventos WINDOWFOCUSGAINED/LOST do SDL, que
+    ficam inconsistentes quando a janela está com always-on-top ativo
+    (o próprio Pygame às vezes reporta foco mesmo com outra janela em
+    primeiro plano). Retorna None se não suportado (fora do Windows).
+    """
+    if not _SUPPORTED:
+        return None
+    hwnd = get_hwnd()
+    if hwnd is None:
+        return None
+    return win32gui.GetForegroundWindow() == hwnd

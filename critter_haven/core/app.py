@@ -32,6 +32,7 @@ from critter_haven.entities.creature import Creature
 from critter_haven.persistence.save_file import load_game, save_game
 from critter_haven.persistence.serializer import build_save_dict, restore_from_save
 from critter_haven.render.creature_render import draw_creature
+from critter_haven.render.fonts import get_font
 from critter_haven.systems.offline_progress import apply_offline_progress
 from critter_haven.systems.production_system import update_production
 from critter_haven.systems.travel_system import can_travel, travel
@@ -40,8 +41,9 @@ from critter_haven.ui.menu_window import run_menu_window
 AUTOSAVE_INTERVAL_SECONDS = 30.0
 WELCOME_BACK_MIN_ELAPSED_SECONDS = 30.0
 
-FPS_FOCUSED = 60
-FPS_UNFOCUSED = 15
+FPS_FOCUSED = 30
+FPS_UNFOCUSED = 8
+FOCUS_CHECK_INTERVAL_SECONDS = 0.5
 BACKGROUND_COLOR = (58, 92, 68)
 ENERGY_BAR_COLOR = (255, 214, 92)
 ENERGY_BAR_BG = (40, 40, 40)
@@ -149,20 +151,32 @@ class App:
         self.running = True
         while self.running:
             dt = self.clock.tick(FPS_FOCUSED if self.focused else FPS_UNFOCUSED) / 1000.0
+            self._refresh_focus_state()
             self._handle_events()
             self._process_menu_commands()
             self._update(dt)
             self._publish_menu_snapshot()
             self._render()
 
+    def _refresh_focus_state(self) -> None:
+        # window.is_foreground() (checagem direta via win32) é mais confiável
+        # que os eventos WINDOWFOCUSGAINED/LOST do SDL, que ficam inconsistentes
+        # com always-on-top ativo — chegavam a reportar foco com outra janela
+        # em primeiro plano, prendendo o jogo em 60 FPS o tempo todo.
+        foreground = window.is_foreground()
+        if foreground is not None:
+            self.focused = foreground
+
     def _handle_events(self) -> None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
             elif event.type == pygame.WINDOWFOCUSGAINED:
-                self.focused = True
+                if window.is_foreground() is None:
+                    self.focused = True
             elif event.type == pygame.WINDOWFOCUSLOST:
-                self.focused = False
+                if window.is_foreground() is None:
+                    self.focused = False
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 self._handle_click(event.pos)
 
@@ -363,7 +377,7 @@ class App:
         if not self.welcome_back_message or self.welcome_back_timer <= 0:
             return
         width, height = self.surface.get_size()
-        font = pygame.font.SysFont("consolas", 13)
+        font = get_font("consolas", 13)
         surf = font.render(self.welcome_back_message, True, (255, 255, 255))
         banner = pygame.Rect(0, 0, min(surf.get_width() + 24, width - 20), 30)
         banner.center = (width // 2, min(70, height - 20))
@@ -380,7 +394,7 @@ class App:
         fill_rect.width = int(bar_rect.width * self.habitat.energy_ratio())
         pygame.draw.rect(self.surface, ENERGY_BAR_COLOR, fill_rect)
 
-        font = pygame.font.SysFont("consolas", 11)
+        font = get_font("consolas", 11)
         count_text = f"Criaturas: {len(self.habitat.creatures)}/{self.habitat.max_creatures}"
         count_surf = font.render(count_text, True, (230, 230, 230))
         self.surface.blit(count_surf, (bar_rect.right + 8, bar_rect.y - 1))
@@ -391,12 +405,12 @@ class App:
         gold_per_second = (
             sum(c.gold_per_second for c in self.habitat.creatures) * gold_multiplier
         )
-        font = pygame.font.SysFont("consolas", 16)
+        font = get_font("consolas", 16)
         text = f"Ouro: {self.wallet.gold:.0f}   (+{gold_per_second:.0f}/s)"
         surf = font.render(text, True, (255, 255, 255))
         self.surface.blit(surf, (width - surf.get_width() - 16, 12))
 
-        chest_font = pygame.font.SysFont("consolas", 13)
+        chest_font = get_font("consolas", 13)
         chest_text = f"Baú: {self.chest.total_count()}/{self.chest.capacity} itens"
         chest_surf = chest_font.render(chest_text, True, (230, 230, 230))
         self.surface.blit(chest_surf, (width - chest_surf.get_width() - 16, 32))
@@ -410,7 +424,7 @@ class App:
             )
 
     def _render_menu_button(self) -> None:
-        font = pygame.font.SysFont("consolas", 12, bold=True)
+        font = get_font("consolas", 12, bold=True)
         mouse_pos = pygame.mouse.get_pos()
         self.menu_button_rect = pygame.Rect(12, 28, 90, 22)
         active = self.menu_bridge.is_visible()
@@ -439,7 +453,7 @@ class App:
             else SELL_BUTTON_COLOR
         )
         pygame.draw.rect(self.surface, color, self.sell_button_rect, border_radius=6)
-        font = pygame.font.SysFont("consolas", 15, bold=True)
+        font = get_font("consolas", 15, bold=True)
         label = font.render("Vender Tudo", True, (30, 20, 0))
         label_pos = (
             self.sell_button_rect.centerx - label.get_width() // 2,
@@ -452,7 +466,7 @@ class App:
             return
         width, height = self.surface.get_size()
         species = self.selected_creature.species
-        font = pygame.font.SysFont("consolas", 14)
+        font = get_font("consolas", 14)
         lines = [
             f"{species.name} ({species.rarity})",
             f"Produção: {species.base_gold_per_second} ouro/s",
