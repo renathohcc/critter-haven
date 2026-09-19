@@ -94,18 +94,32 @@ class TileMap:
             if image is not None:
                 target.blit(image, (offset[0] + x * tw, offset[1] + y * th))
 
-    def ground_line_y(self, layer_name: str = "Floor") -> int:
-        """Y (em pixels do mapa) da linha mais alta com tile na camada de
-        chão — é onde os pés das criaturas devem encostar. Cai pro fundo
-        do mapa se a camada não existir ou estiver vazia."""
+    def ground_line_y(self, layer_name: str = "Floor", min_coverage: float = 0.5) -> int:
+        """Y (em pixels do mapa) da linha do chão de verdade — a primeira
+        linha da camada de chão que cobre pelo menos `min_coverage` da
+        largura do mapa. Isso ignora blocos soltos/isolados que não
+        representam a superfície real (ex: uma linha com só 2 tiles de 30,
+        provavelmente sobra de teste no editor) — sem esse filtro, a linha
+        do chão calculada cai no meio do nada e o chão "some" nos estados
+        de janela mais baixos (bug relatado pelo dev)."""
         try:
             layer = self.tmx_data.get_layer_by_name(layer_name)
         except ValueError:
             return self.pixel_height
-        rows_with_tiles = [y for _x, y, gid in layer.iter_data() if gid != 0]
-        if not rows_with_tiles:
+
+        row_counts: dict[int, int] = {}
+        for _x, y, gid in layer.iter_data():
+            if gid != 0:
+                row_counts[y] = row_counts.get(y, 0) + 1
+        if not row_counts:
             return self.pixel_height
-        return min(rows_with_tiles) * self.tmx_data.tileheight
+
+        threshold = self.tmx_data.width * min_coverage
+        solid_rows = [y for y, count in row_counts.items() if count >= threshold]
+        if not solid_rows:
+            # nenhuma linha atinge a cobertura minima: usa a mais preenchida
+            solid_rows = [max(row_counts, key=row_counts.get)]
+        return min(solid_rows) * self.tmx_data.tileheight
 
     def compose_for_window(
         self,
