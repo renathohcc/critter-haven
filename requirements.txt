@@ -1,3 +1,4 @@
 pygame-ce==2.5.8
 pywin32==312
 pytest==9.1.1
+Pillow==12.3.0  # apenas para scripts/ de pipeline de assets, nao usado em runtime
