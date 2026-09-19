@@ -32,13 +32,17 @@ def main() -> None:
 
     west = Image.open(rotations_dir / "west.png").convert("RGBA")
     east = Image.open(rotations_dir / "east.png").convert("RGBA")
-    if west.size != east.size:
-        raise ValueError(f"west e east têm tamanhos diferentes: {west.size} vs {east.size}")
+    south = Image.open(rotations_dir / "south.png").convert("RGBA")
+    if not (west.size == east.size == south.size):
+        raise ValueError(
+            f"rotações com tamanhos diferentes: west={west.size} east={east.size} south={south.size}"
+        )
 
     frame_w, frame_h = west.size
-    sheet = Image.new("RGBA", (frame_w * 2, frame_h), (0, 0, 0, 0))
+    sheet = Image.new("RGBA", (frame_w * 3, frame_h), (0, 0, 0, 0))
     sheet.paste(west, (0, 0))
     sheet.paste(east, (frame_w, 0))
+    sheet.paste(south, (frame_w * 2, 0))
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     image_path = OUT_DIR / f"{species_id}.png"
@@ -49,6 +53,7 @@ def main() -> None:
         "states": {
             "walk_left": {"frames": [0], "fps": 1, "loop": True},
             "walk_right": {"frames": [1], "fps": 1, "loop": True},
+            "idle": {"frames": [2], "fps": 1, "loop": True},
         },
     }
     meta_path = OUT_DIR / f"{species_id}.json"

@@ -17,6 +17,13 @@
       ],
       "fps": 1,
       "loop": true
+    },
+    "idle": {
+      "frames": [
+        2
+      ],
+      "fps": 1,
+      "loop": true
     }
   }
 }

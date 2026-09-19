@@ -39,12 +39,17 @@ _RARITY_RING = {
 
 
 def _animation_state_for(creature: Creature, sheet) -> str:
-    desired = "walk_left" if creature.direction < 0 else "walk_right"
-    if sheet.has_state(desired):
-        return desired
-    if sheet.has_state("walk"):
-        return "walk"
-    return "idle"
+    if creature.is_walking:
+        desired = "walk_left" if creature.direction < 0 else "walk_right"
+        if sheet.has_state(desired):
+            return desired
+        if sheet.has_state("walk"):
+            return "walk"
+    if sheet.has_state("idle"):
+        return "idle"
+    # sem pose de descanso ainda: usa a última direção conhecida como fallback
+    fallback = "walk_left" if creature.direction < 0 else "walk_right"
+    return fallback if sheet.has_state(fallback) else next(iter(sheet.states))
 
 
 def _breathing_scale(creature: Creature) -> float:

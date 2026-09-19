@@ -8,8 +8,15 @@ from dataclasses import dataclass, field
 from critter_haven.config.economy import ITEM_INTERVAL_BY_RARITY
 from critter_haven.data.species import Species
 
-WANDER_SPEED = 18.0  # pixels/segundo
+WANDER_SPEED = 14.0  # pixels/segundo, só durante a rajada de caminhada
 CLICK_FEEDBACK_DURATION = 0.4
+
+# A criatura passa a maior parte do tempo parada "descansando" (de frente,
+# respirando) e só de vez em quando dá uma rajada curta de caminhada antes
+# de descansar de novo — pedido do dev pra ficar mais cozy/idle e menos
+# "ficar andando sem parar".
+REST_DURATION_RANGE = (3.0, 8.0)
+WALK_DURATION_RANGE = (0.5, 1.2)
 
 
 @dataclass(eq=False)
@@ -18,7 +25,8 @@ class Creature:
     x: float
     y: float
     direction: int = 1
-    move_timer: float = 0.0
+    state: str = "resting"  # "resting" | "walking"
+    state_timer: float = field(default_factory=lambda: random.uniform(*REST_DURATION_RANGE))
     click_feedback_timer: float = 0.0
     item_timer: float = field(default=0.0)
     item_feedback_timer: float = 0.0
@@ -38,16 +46,22 @@ class Creature:
         return self.species.base_gold_per_second
 
     def update(self, dt: float, min_x: float, max_x: float) -> None:
-        self.move_timer -= dt
-        if self.move_timer <= 0:
-            self.direction = random.choice((-1, 1))
-            self.move_timer = random.uniform(1.5, 4.0)
+        self.state_timer -= dt
+        if self.state_timer <= 0:
+            if self.state == "resting":
+                self.state = "walking"
+                self.direction = random.choice((-1, 1))
+                self.state_timer = random.uniform(*WALK_DURATION_RANGE)
+            else:
+                self.state = "resting"
+                self.state_timer = random.uniform(*REST_DURATION_RANGE)
 
-        self.x += self.direction * WANDER_SPEED * dt
-        if self.x < min_x:
-            self.x, self.direction = min_x, 1
-        elif self.x > max_x:
-            self.x, self.direction = max_x, -1
+        if self.state == "walking":
+            self.x += self.direction * WANDER_SPEED * dt
+            if self.x < min_x:
+                self.x, self.direction = min_x, 1
+            elif self.x > max_x:
+                self.x, self.direction = max_x, -1
 
         if self.click_feedback_timer > 0:
             self.click_feedback_timer = max(0.0, self.click_feedback_timer - dt)
@@ -71,3 +85,7 @@ class Creature:
 
     def is_item_feedback_active(self) -> bool:
         return self.item_feedback_timer > 0
+
+    @property
+    def is_walking(self) -> bool:
+        return self.state == "walking"
