@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass, field
 
-from critter_haven.config.habitat_zones import SPECIES_ROAM_FRACTIONS
+from critter_haven.config.habitat_zones import SPECIES_ROAM_FRACTIONS, STATIONARY_SPECIES
 from critter_haven.config.spawn import (
     BASE_MAX_CREATURES,
     ENERGY_MAX,
@@ -61,7 +62,17 @@ class Habitat:
     def _spawn(self) -> Species:
         species = roll_species(self.species_pool)
         roam_min, roam_max = self._roam_bounds_for(species.id)
-        x = (roam_min + roam_max) / 2
+
+        if species.id in STATIONARY_SPECIES:
+            # planta numa posição aleatória dentro da zona e fixa ali pra
+            # sempre — não é uma zona compartilhada, cada indivíduo tem a
+            # sua (ex: uma flor não anda, e várias não devem nascer
+            # empilhadas no mesmo x).
+            x = random.uniform(roam_min, roam_max)
+            roam_min = roam_max = x
+        else:
+            x = (roam_min + roam_max) / 2
+
         self.creatures.append(
             Creature(
                 species=species,
@@ -79,6 +90,13 @@ class Habitat:
         depois de mudar habitat.min_x/max_x (ex: redimensionar a janela),
         já que as zonas são frações da largura útil do habitat."""
         for creature in self.creatures:
+            if creature.species.id in STATIONARY_SPECIES:
+                # nao reamostra uma nova posicao aleatoria -- so garante que
+                # a posicao ja fixada continua dentro dos limites (janela
+                # pode ter encolhido) e mantem o pino de largura zero ali.
+                creature.x = min(max(creature.x, self.min_x), self.max_x)
+                creature.roam_min_x = creature.roam_max_x = creature.x
+                continue
             roam_min, roam_max = self._roam_bounds_for(creature.species.id)
             creature.roam_min_x, creature.roam_max_x = roam_min, roam_max
             creature.x = min(max(creature.x, roam_min), roam_max)

@@ -11,3 +11,9 @@ SPECIES_ROAM_FRACTIONS: dict[str, tuple[float, float]] = {
     # (pedido do dev, região do salgueiro) = pixels 0-320 = fração 0-0.333.
     "mossnib": (0.0, 0.3333),
 }
+
+# Espécies que nascem numa posição e ficam fixas ali pra sempre (ex: uma
+# flor não anda). Cada indivíduo sorteia sua própria posição dentro da
+# zona da espécie (ou do habitat inteiro, se não tiver zona definida) e
+# fica pinado lá — não é uma zona compartilhada como SPECIES_ROAM_FRACTIONS.
+STATIONARY_SPECIES: set[str] = {"lumibloom"}
