@@ -74,11 +74,9 @@ if __name__ == "__main__":
     IMAGES_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(".")
 
     assemble(
-        "mossnib",
+        "lumibloom",
         {
-            "idle": (IMAGES_DIR / "40.gif", True),
-            "walk_left": (IMAGES_DIR / "37.gif", True),
-            "walk_right": (IMAGES_DIR / "38.gif", True),
-            "click": (IMAGES_DIR / "39.gif", False),
+            "idle": (IMAGES_DIR / "43.gif", True),
+            "click": (IMAGES_DIR / "42.gif", False),
         },
     )
