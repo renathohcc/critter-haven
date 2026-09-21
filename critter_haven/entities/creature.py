@@ -36,6 +36,11 @@ class Creature:
     click_feedback_timer: float = 0.0
     item_timer: float = field(default=0.0)
     item_feedback_timer: float = 0.0
+    # Zona de circulação própria da espécie (ex: Mossnib fica perto do
+    # salgueiro). None = usa os limites do habitat inteiro, passados em
+    # update(). Ver config/habitat_zones.py.
+    roam_min_x: float | None = None
+    roam_max_x: float | None = None
 
     def __post_init__(self) -> None:
         if self.item_timer <= 0:
@@ -52,6 +57,9 @@ class Creature:
         return self.species.base_gold_per_second
 
     def update(self, dt: float, min_x: float, max_x: float) -> None:
+        lo = self.roam_min_x if self.roam_min_x is not None else min_x
+        hi = self.roam_max_x if self.roam_max_x is not None else max_x
+
         self.state_timer -= dt
         if self.state_timer <= 0:
             if self.state == "resting":
@@ -64,10 +72,10 @@ class Creature:
 
         if self.state == "walking":
             self.x += self.direction * WANDER_SPEED * dt
-            if self.x < min_x:
-                self.x, self.direction = min_x, 1
-            elif self.x > max_x:
-                self.x, self.direction = max_x, -1
+            if self.x < lo:
+                self.x, self.direction = lo, 1
+            elif self.x > hi:
+                self.x, self.direction = hi, -1
 
         if self.click_feedback_timer > 0:
             self.click_feedback_timer = max(0.0, self.click_feedback_timer - dt)

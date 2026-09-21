@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from critter_haven.config.habitat_zones import SPECIES_ROAM_FRACTIONS
 from critter_haven.config.spawn import (
     BASE_MAX_CREATURES,
     ENERGY_MAX,
@@ -49,12 +50,38 @@ class Habitat:
         pelo cálculo de progresso offline, que simula spawns represados)."""
         return self._spawn()
 
+    def _roam_bounds_for(self, species_id: str) -> tuple[float, float]:
+        fractions = SPECIES_ROAM_FRACTIONS.get(species_id)
+        if fractions is None:
+            return self.min_x, self.max_x
+        frac_min, frac_max = fractions
+        span = self.max_x - self.min_x
+        return self.min_x + span * frac_min, self.min_x + span * frac_max
+
     def _spawn(self) -> Species:
         species = roll_species(self.species_pool)
-        x = (self.min_x + self.max_x) / 2
-        self.creatures.append(Creature(species=species, x=x, y=self.spawn_y))
+        roam_min, roam_max = self._roam_bounds_for(species.id)
+        x = (roam_min + roam_max) / 2
+        self.creatures.append(
+            Creature(
+                species=species,
+                x=x,
+                y=self.spawn_y,
+                roam_min_x=roam_min,
+                roam_max_x=roam_max,
+            )
+        )
         self.last_spawn_species = species
         return species
+
+    def resync_roam_bounds(self) -> None:
+        """Recalcula as zonas de circulação de todas as criaturas — chamar
+        depois de mudar habitat.min_x/max_x (ex: redimensionar a janela),
+        já que as zonas são frações da largura útil do habitat."""
+        for creature in self.creatures:
+            roam_min, roam_max = self._roam_bounds_for(creature.species.id)
+            creature.roam_min_x, creature.roam_max_x = roam_min, roam_max
+            creature.x = min(max(creature.x, roam_min), roam_max)
 
     def energy_ratio(self) -> float:
         return self.energy / ENERGY_MAX

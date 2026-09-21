@@ -360,6 +360,7 @@ class App:
 
         for creature in self.habitat.creatures:
             creature.y = self.habitat.spawn_y
+        self.habitat.resync_roam_bounds()
 
     def _apply_always_on_top(self, enabled: bool) -> None:
         window.set_always_on_top(enabled)
