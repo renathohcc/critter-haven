@@ -64,16 +64,16 @@ def draw_creature(surface: pygame.Surface, creature: Creature, dt: float = 0.0) 
         anchor = (feet[0], feet[1] + sheet.ground_offset)
         rect = frame.get_rect(midbottom=anchor)
         surface.blit(frame, rect)
-        center = rect.center
-        ring_radius = sheet.frame_width // 2 - 2
     else:
         center = (feet[0], feet[1] - RADIUS)
         _draw_placeholder(surface, creature, center)
-        ring_radius = RADIUS + 3
-
-    ring_color = _RARITY_RING.get(creature.rarity)
-    if ring_color:
-        pygame.draw.circle(surface, ring_color, center, ring_radius, width=3)
+        # o anel de raridade so faz sentido no placeholder geometrico, que
+        # nao tem nenhuma outra pista visual de raridade -- sprites reais
+        # ja comunicam isso pela propria arte (pedido do dev: tirar o anel
+        # quando a criatura ja tem sprite de verdade).
+        ring_color = _RARITY_RING.get(creature.rarity)
+        if ring_color:
+            pygame.draw.circle(surface, ring_color, center, RADIUS + 3, width=3)
 
     font = get_font("consolas", 12)
     label = font.render(creature.species.name, True, (255, 255, 255))
