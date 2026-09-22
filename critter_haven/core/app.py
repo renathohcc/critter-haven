@@ -36,7 +36,7 @@ from critter_haven.render.background import (
     get_background,
     get_foreground_decor,
 )
-from critter_haven.render.creature_render import draw_creature
+from critter_haven.render.creature_render import creature_top_y, draw_creature
 from critter_haven.render.fonts import get_font
 from critter_haven.render.tilemap import TileMap, load_map
 from critter_haven.systems.offline_progress import apply_offline_progress
@@ -534,7 +534,20 @@ class App:
             f"Item: {species.item_name} ({self.price_map[species.item_name]:.0f} ouro/un.)",
         ]
         panel_height = 20 * len(lines) + 10 + (30 if has_duplicate else 0)
-        panel = pygame.Rect(10, height - panel_height - 10, min(340, width - 20), panel_height)
+        panel_width = min(300, width - 20)
+
+        # Painel aparece perto da criatura clicada (acima dela, ou abaixo
+        # se não houver espaço) em vez de fixo no canto — senão cobre as
+        # próprias criaturas quando clicadas perto da borda esquerda
+        # (bug relatado pelo dev: painel tampava as criaturas do Mossnib).
+        top_margin = 34  # altura da faixa de HUD no topo
+        creature_x = int(self.selected_creature.x)
+        sprite_top = creature_top_y(self.selected_creature)
+        panel_y = sprite_top - 6 - panel_height
+        if panel_y < top_margin:
+            panel_y = int(self.selected_creature.y) + 6
+        panel_x = min(max(creature_x - panel_width // 2, 10), width - 10 - panel_width)
+        panel = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
         pygame.draw.rect(self.surface, (20, 20, 20), panel)
         pygame.draw.rect(self.surface, (255, 255, 255), panel, width=1)
         for i, line in enumerate(lines):

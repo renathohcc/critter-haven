@@ -14,7 +14,6 @@ import pygame
 
 from critter_haven.entities.creature import Creature
 from critter_haven.render.animation import current_frame
-from critter_haven.render.fonts import get_font
 from critter_haven.render.spritesheet import load_creature_sheet
 
 RADIUS = 20
@@ -75,9 +74,13 @@ def draw_creature(surface: pygame.Surface, creature: Creature, dt: float = 0.0) 
         if ring_color:
             pygame.draw.circle(surface, ring_color, center, RADIUS + 3, width=3)
 
-    font = get_font("consolas", 12)
-    label = font.render(creature.species.name, True, (255, 255, 255))
-    surface.blit(label, (feet[0] - label.get_width() // 2, feet[1] + 2))
+def creature_top_y(creature: Creature) -> float:
+    """Y aproximado do topo do sprite na tela — usado pra posicionar UI
+    (ex: painel de seleção) acima da criatura sem cobrir ela."""
+    sheet = load_creature_sheet(creature.species.id)
+    if sheet is not None:
+        return creature.y - sheet.frame_height + sheet.ground_offset
+    return creature.y - RADIUS * 2
 
 
 def _draw_placeholder(
