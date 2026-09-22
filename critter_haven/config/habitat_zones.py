@@ -7,9 +7,12 @@ Espécies fora deste dicionário circulam pelo habitat inteiro (padrão
 anterior a essa feature)."""
 
 SPECIES_ROAM_FRACTIONS: dict[str, tuple[float, float]] = {
-    # Elyndor.tmx tem 30 colunas de 32px (960px). "Colunas 1-10" do mapa
-    # (pedido do dev, região do salgueiro) = pixels 0-320 = fração 0-0.333.
-    "mossnib": (0.0, 0.3333),
+    # Elyndor.tmx tem 30 colunas de 32px (960px). Zonas definidas com base
+    # nos elementos de decoração desenhados no mapa (Decoration 1):
+    "mossnib": (0.0, 0.3333),  # colunas 0-10: salgueiro
+    "pebblit": (0.3333, 0.5667),  # colunas 10-17: pilha de pedras
+    "breezel": (0.5667, 0.7667),  # colunas 17-23: pedra com cristal, tronco
+    "solarva": (0.7667, 1.0),  # colunas 23-30: trecho final, arbusto
 }
 
 # Espécies que nascem numa posição e ficam fixas ali pra sempre (ex: uma
