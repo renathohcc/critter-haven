@@ -40,12 +40,12 @@ class MenuWindow:
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True, padx=6, pady=6)
 
-        habitat_tab = ttk.Frame(self.notebook)
+        self.habitat_tab = ttk.Frame(self.notebook)
         self.album_tab = ttk.Frame(self.notebook)
-        self.notebook.add(habitat_tab, text="Habitat")
+        self.notebook.add(self.habitat_tab, text="Habitat")
         self.notebook.add(self.album_tab, text="Álbum")
 
-        self._build_habitat_tab(habitat_tab)
+        self._build_habitat_tab(self.habitat_tab)
         self._build_album_tab(self.album_tab)
 
     def _build_habitat_tab(self, parent: ttk.Frame) -> None:
@@ -171,6 +171,12 @@ class MenuWindow:
             self.root.deiconify()
         elif not should_show and is_mapped:
             self.root.withdraw()
+
+        for name, payload in self.bridge.drain_to_menu_commands():
+            if name == "select_tab":
+                tab = self.album_tab if payload == "album" else self.habitat_tab
+                self.notebook.select(tab)
+                self.root.lift()
 
         if should_show:
             self._refresh(self.bridge.read_snapshot())

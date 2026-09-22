@@ -7,6 +7,8 @@ diretamente no estado da outra — tudo passa por aqui.
 - `push_command`/`drain_commands`: cliques no menu viram comandos que o
   loop do Pygame aplica ao estado real do jogo, evitando duas threads
   mutando o mesmo objeto ao mesmo tempo.
+- `push_to_menu`/`drain_to_menu_commands`: mão contrária — a barra
+  overlay pede pro Tkinter fazer algo (ex: "abrir já na aba Álbum").
 - `visible`/`stop_event`: flags simples que o Tkinter consulta a cada
   poll para saber se deve aparecer/esconder ou encerrar.
 """
@@ -24,6 +26,7 @@ class MenuBridge:
     _lock: threading.Lock = field(default_factory=threading.Lock)
     _snapshot: dict[str, Any] = field(default_factory=dict)
     commands: "queue.Queue[tuple[str, Any]]" = field(default_factory=queue.Queue)
+    to_menu_commands: "queue.Queue[tuple[str, Any]]" = field(default_factory=queue.Queue)
     stop_event: threading.Event = field(default_factory=threading.Event)
     _visible_lock: threading.Lock = field(default_factory=threading.Lock)
     _visible: bool = False
@@ -44,6 +47,18 @@ class MenuBridge:
         while True:
             try:
                 drained.append(self.commands.get_nowait())
+            except queue.Empty:
+                break
+        return drained
+
+    def push_to_menu(self, name: str, payload: Any = None) -> None:
+        self.to_menu_commands.put((name, payload))
+
+    def drain_to_menu_commands(self) -> list[tuple[str, Any]]:
+        drained = []
+        while True:
+            try:
+                drained.append(self.to_menu_commands.get_nowait())
             except queue.Empty:
                 break
         return drained

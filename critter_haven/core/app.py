@@ -39,6 +39,7 @@ from critter_haven.render.background import (
 from critter_haven.render.creature_render import creature_top_y, draw_creature
 from critter_haven.render.fonts import get_font
 from critter_haven.render.tilemap import TileMap, load_map
+from critter_haven.render.ui_icons import get_button
 from critter_haven.systems.offline_progress import apply_offline_progress
 from critter_haven.systems.production_system import update_production
 from critter_haven.systems.travel_system import can_travel, travel
@@ -55,9 +56,20 @@ ENERGY_BAR_COLOR = (255, 214, 92)
 ENERGY_BAR_BG = (40, 40, 40)
 SELL_BUTTON_COLOR = (214, 160, 50)
 SELL_BUTTON_HOVER = (240, 185, 70)
-TOOLBAR_BUTTON_COLOR = (70, 70, 70)
-TOOLBAR_BUTTON_HOVER = (95, 95, 95)
-TOOLBAR_BUTTON_ON_COLOR = (90, 140, 100)
+
+ICON_BUTTON_HEIGHT = 30
+ICON_BUTTON_GAP = 4
+ICON_ROW_Y = 30
+# ordem de exibicao (esquerda->direita) da fileira de icones, alinhada a
+# direita da janela; cada entrada e (asset, comando_pro_menu ou None)
+ICON_ROW_BUTTONS = (
+    ("btn_vender_tudo", None),
+    ("btn_bau", "habitat"),
+    ("btn_upgrades", "habitat"),
+    ("btn_nave", "habitat"),
+    ("btn_album", "album"),
+)
+TOP_HUD_HEIGHT = ICON_ROW_Y + ICON_BUTTON_HEIGHT + 4  # limite p/ nao sobrepor criaturas
 
 
 class App:
@@ -123,9 +135,8 @@ class App:
         self._apply_always_on_top(always_on_top)
 
         self.selected_creature: Creature | None = None
-        self.sell_button_rect = pygame.Rect(0, 0, 0, 0)
         self.sacrifice_button_rect = pygame.Rect(0, 0, 0, 0)
-        self.menu_button_rect = pygame.Rect(0, 0, 0, 0)
+        self.icon_rects: dict[str, pygame.Rect] = {}
         self.last_sale_feedback: str | None = None
         self.last_sale_feedback_timer = 0.0
         self.last_travel_feedback: str | None = None
@@ -194,12 +205,10 @@ class App:
                 self._handle_click(event.pos)
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
-        if self.menu_button_rect.collidepoint(pos):
-            self.menu_bridge.toggle_visible()
-            return
-        if self.sell_button_rect.collidepoint(pos):
-            self._sell_all()
-            return
+        for name, rect in self.icon_rects.items():
+            if rect.collidepoint(pos):
+                self._handle_icon_click(name)
+                return
         if self.sacrifice_button_rect.collidepoint(pos) and self.selected_creature:
             self._sacrifice_duplicate(self.selected_creature.species.id)
             return
@@ -210,6 +219,15 @@ class App:
             self.selected_creature = creature
         else:
             self.selected_creature = None
+
+    def _handle_icon_click(self, name: str) -> None:
+        if name == "btn_vender_tudo":
+            self._sell_all()
+            return
+        tab = dict(ICON_ROW_BUTTONS).get(name)
+        if tab is not None:
+            self.menu_bridge.set_visible(True)
+            self.menu_bridge.push_to_menu("select_tab", tab)
 
     def _sacrifice_duplicate(self, species_id: str) -> None:
         spawned = self.habitat.sacrifice_duplicate_and_spawn(species_id)
@@ -426,8 +444,7 @@ class App:
             ):
                 self.surface.blit(decor_surface, decor_pos)
         self._render_hud()
-        self._render_menu_button()
-        self._render_sell_button()
+        self._render_icon_row()
         self._render_selection_panel()
         self._render_welcome_back_banner()
         pygame.display.flip()
@@ -464,61 +481,46 @@ class App:
         gold_per_second = (
             sum(c.gold_per_second for c in self.habitat.creatures) * gold_multiplier
         )
-        font = get_font("consolas", 16)
+        # Texto reduzido a só o essencial (ouro) — Baú/Upgrades/Nave/Álbum
+        # agora têm ícone próprio que abre o menu com o detalhe completo,
+        # então não precisa duplicar essa informação em texto solto aqui
+        # (pedido do dev: menos texto, mais ícones).
+        font = get_font("consolas", 15)
         text = f"Ouro: {self.wallet.gold:.0f}   (+{gold_per_second:.0f}/s)"
         surf = font.render(text, True, (255, 255, 255))
         self.surface.blit(surf, (width - surf.get_width() - 16, 12))
 
-        chest_font = get_font("consolas", 13)
-        chest_text = f"Baú: {self.chest.total_count()}/{self.chest.capacity} itens"
-        chest_surf = chest_font.render(chest_text, True, (230, 230, 230))
-        self.surface.blit(chest_surf, (width - chest_surf.get_width() - 16, 32))
-
         if self.last_sale_feedback and self.last_sale_feedback_timer > 0:
-            feedback_surf = chest_font.render(
+            feedback_font = get_font("consolas", 13)
+            feedback_surf = feedback_font.render(
                 self.last_sale_feedback, True, (255, 230, 140)
             )
             self.surface.blit(
-                feedback_surf, (width - feedback_surf.get_width() - 16, 50)
+                feedback_surf, (width - feedback_surf.get_width() - 16, ICON_ROW_Y + ICON_BUTTON_HEIGHT + 4)
             )
 
-    def _render_menu_button(self) -> None:
-        font = get_font("consolas", 12, bold=True)
+    def _render_icon_row(self) -> None:
+        width, _ = self.surface.get_size()
         mouse_pos = pygame.mouse.get_pos()
-        self.menu_button_rect = pygame.Rect(12, 28, 90, 22)
-        active = self.menu_bridge.is_visible()
-        color = (
-            TOOLBAR_BUTTON_ON_COLOR
-            if active
-            else TOOLBAR_BUTTON_HOVER
-            if self.menu_button_rect.collidepoint(mouse_pos)
-            else TOOLBAR_BUTTON_COLOR
-        )
-        pygame.draw.rect(self.surface, color, self.menu_button_rect, border_radius=4)
-        text = font.render("Menu", True, (255, 255, 255))
-        self.surface.blit(text, text.get_rect(center=self.menu_button_rect.center))
+        self.icon_rects = {}
 
-    def _render_sell_button(self) -> None:
-        width, height = self.surface.get_size()
-        button_width, button_height = 130, 34
-        self.sell_button_rect = pygame.Rect(
-            width - button_width - 16, height - button_height - 12,
-            button_width, button_height,
-        )
-        mouse_pos = pygame.mouse.get_pos()
-        color = (
-            SELL_BUTTON_HOVER
-            if self.sell_button_rect.collidepoint(mouse_pos)
-            else SELL_BUTTON_COLOR
-        )
-        pygame.draw.rect(self.surface, color, self.sell_button_rect, border_radius=6)
-        font = get_font("consolas", 15, bold=True)
-        label = font.render("Vender Tudo", True, (30, 20, 0))
-        label_pos = (
-            self.sell_button_rect.centerx - label.get_width() // 2,
-            self.sell_button_rect.centery - label.get_height() // 2,
-        )
-        self.surface.blit(label, label_pos)
+        # calcula larguras primeiro pra poder alinhar tudo à direita
+        buttons = [(name, get_button(name, ICON_BUTTON_HEIGHT)) for name, _tab in ICON_ROW_BUTTONS]
+        total_width = sum(b.get_width() for _n, b in buttons) + ICON_BUTTON_GAP * (len(buttons) - 1)
+        x = width - 16 - total_width
+
+        for name, icon in buttons:
+            rect = pygame.Rect(x, ICON_ROW_Y, icon.get_width(), icon.get_height())
+            self.icon_rects[name] = rect
+            # leve "aceso" ao passar o mouse — a arte já é rica, então só
+            # um brilho sutil (sem trocar de imagem) basta como feedback.
+            if rect.collidepoint(mouse_pos):
+                glow = icon.copy()
+                glow.fill((30, 30, 30, 0), special_flags=pygame.BLEND_RGBA_ADD)
+                self.surface.blit(glow, rect)
+            else:
+                self.surface.blit(icon, rect)
+            x += icon.get_width() + ICON_BUTTON_GAP
 
     def _render_selection_panel(self) -> None:
         self.sacrifice_button_rect = pygame.Rect(0, 0, 0, 0)
@@ -540,7 +542,7 @@ class App:
         # se não houver espaço) em vez de fixo no canto — senão cobre as
         # próprias criaturas quando clicadas perto da borda esquerda
         # (bug relatado pelo dev: painel tampava as criaturas do Mossnib).
-        top_margin = 34  # altura da faixa de HUD no topo
+        top_margin = TOP_HUD_HEIGHT
         creature_x = int(self.selected_creature.x)
         sprite_top = creature_top_y(self.selected_creature)
         panel_y = sprite_top - 6 - panel_height
