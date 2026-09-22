@@ -74,11 +74,11 @@ if __name__ == "__main__":
     IMAGES_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(".")
 
     assemble(
-        "pebblit",
+        "solarva",
         {
-            "idle": (IMAGES_DIR / "55.gif", True),
-            "walk_left": (IMAGES_DIR / "53.gif", True),
-            "walk_right": (IMAGES_DIR / "54.gif", True),
-            "click": (IMAGES_DIR / "52.gif", False),
+            "idle": (IMAGES_DIR / "59.gif", True),
+            "walk_left": (IMAGES_DIR / "58.gif", True),
+            "walk_right": (IMAGES_DIR / "57.gif", True),
+            "click": (IMAGES_DIR / "56.gif", False),
         },
     )
