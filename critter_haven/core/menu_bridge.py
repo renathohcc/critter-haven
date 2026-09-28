@@ -8,9 +8,12 @@ diretamente no estado da outra — tudo passa por aqui.
   loop do Pygame aplica ao estado real do jogo, evitando duas threads
   mutando o mesmo objeto ao mesmo tempo.
 - `push_to_menu`/`drain_to_menu_commands`: mão contrária — a barra
-  overlay pede pro Tkinter fazer algo (ex: "abrir já na aba Álbum").
-- `visible`/`stop_event`: flags simples que o Tkinter consulta a cada
-  poll para saber se deve aparecer/esconder ou encerrar.
+  overlay pede pro Tkinter fazer algo (ex: "abrir a janela do Álbum").
+- `show_window`/`hide_window`/`is_window_visible`: cada menu (Baú,
+  Upgrades, Nave, Álbum) é uma janela Tkinter própria e independente;
+  este dicionário guarda o estado de visibilidade de cada uma.
+- `stop_event`: flag simples que o Tkinter consulta a cada poll para
+  saber se deve encerrar.
 """
 
 from __future__ import annotations
@@ -28,8 +31,8 @@ class MenuBridge:
     commands: "queue.Queue[tuple[str, Any]]" = field(default_factory=queue.Queue)
     to_menu_commands: "queue.Queue[tuple[str, Any]]" = field(default_factory=queue.Queue)
     stop_event: threading.Event = field(default_factory=threading.Event)
-    _visible_lock: threading.Lock = field(default_factory=threading.Lock)
-    _visible: bool = False
+    _window_visible_lock: threading.Lock = field(default_factory=threading.Lock)
+    _window_visible: dict[str, bool] = field(default_factory=dict)
 
     def publish(self, snapshot: dict[str, Any]) -> None:
         with self._lock:
@@ -63,14 +66,14 @@ class MenuBridge:
                 break
         return drained
 
-    def set_visible(self, visible: bool) -> None:
-        with self._visible_lock:
-            self._visible = visible
+    def show_window(self, name: str) -> None:
+        with self._window_visible_lock:
+            self._window_visible[name] = True
 
-    def toggle_visible(self) -> None:
-        with self._visible_lock:
-            self._visible = not self._visible
+    def hide_window(self, name: str) -> None:
+        with self._window_visible_lock:
+            self._window_visible[name] = False
 
-    def is_visible(self) -> bool:
-        with self._visible_lock:
-            return self._visible
+    def is_window_visible(self, name: str) -> bool:
+        with self._window_visible_lock:
+            return self._window_visible.get(name, False)

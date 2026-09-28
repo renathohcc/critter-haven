@@ -36,7 +36,13 @@ from critter_haven.render.background import (
     get_background,
     get_foreground_decor,
 )
-from critter_haven.render.creature_render import creature_top_y, draw_creature
+from critter_haven.render.energy_bar import draw_energy_bar
+from critter_haven.render.stat_badge import draw_stat_badge
+from critter_haven.render.creature_render import (
+    creature_half_width,
+    creature_top_y,
+    draw_creature,
+)
 from critter_haven.render.fonts import get_font
 from critter_haven.render.tilemap import TileMap, load_map
 from critter_haven.render.ui_icons import get_button
@@ -52,24 +58,23 @@ FPS_FOCUSED = 30
 FPS_UNFOCUSED = 8
 FOCUS_CHECK_INTERVAL_SECONDS = 0.5
 BACKGROUND_COLOR = (58, 92, 68)
-ENERGY_BAR_COLOR = (255, 214, 92)
-ENERGY_BAR_BG = (40, 40, 40)
-SELL_BUTTON_COLOR = (214, 160, 50)
-SELL_BUTTON_HOVER = (240, 185, 70)
 
-ICON_BUTTON_HEIGHT = 30
-ICON_BUTTON_GAP = 4
-ICON_ROW_Y = 30
+ICON_BUTTON_HEIGHT = 48
+ICON_BUTTON_GAP = 6
+ICON_ROW_Y = 6
 # ordem de exibicao (esquerda->direita) da fileira de icones, alinhada a
-# direita da janela; cada entrada e (asset, comando_pro_menu ou None)
+# direita da janela; cada entrada e (asset, nome_da_janela_de_menu ou None).
+# Cada janela e independente (nao existe mais um notebook unico) -- ver
+# critter_haven/ui/menu_window.py.
 ICON_ROW_BUTTONS = (
     ("btn_vender_tudo", None),
-    ("btn_bau", "habitat"),
-    ("btn_upgrades", "habitat"),
-    ("btn_nave", "habitat"),
+    ("btn_bau", "bau"),
+    ("btn_upgrades", "upgrades"),
+    ("btn_nave", "nave"),
+    ("btn_fusao", "fusion"),
     ("btn_album", "album"),
 )
-TOP_HUD_HEIGHT = ICON_ROW_Y + ICON_BUTTON_HEIGHT + 4  # limite p/ nao sobrepor criaturas
+TOP_HUD_HEIGHT = ICON_ROW_Y + ICON_BUTTON_HEIGHT + 6 + 95  # icones + selos de ouro/bau/venda
 
 
 class App:
@@ -135,12 +140,13 @@ class App:
         self._apply_always_on_top(always_on_top)
 
         self.selected_creature: Creature | None = None
-        self.sacrifice_button_rect = pygame.Rect(0, 0, 0, 0)
         self.icon_rects: dict[str, pygame.Rect] = {}
         self.last_sale_feedback: str | None = None
         self.last_sale_feedback_timer = 0.0
         self.last_travel_feedback: str | None = None
         self.last_travel_feedback_timer = 0.0
+        self.last_fusion_result: str | None = None
+        self.animation_time = 0.0
         self.welcome_back_timer = 8.0 if self.welcome_back_message else 0.0
         self.autosave_timer = AUTOSAVE_INTERVAL_SECONDS
 
@@ -209,9 +215,6 @@ class App:
             if rect.collidepoint(pos):
                 self._handle_icon_click(name)
                 return
-        if self.sacrifice_button_rect.collidepoint(pos) and self.selected_creature:
-            self._sacrifice_duplicate(self.selected_creature.species.id)
-            return
 
         creature = self.habitat.creature_at(pos[0], pos[1])
         if creature:
@@ -224,19 +227,9 @@ class App:
         if name == "btn_vender_tudo":
             self._sell_all()
             return
-        tab = dict(ICON_ROW_BUTTONS).get(name)
-        if tab is not None:
-            self.menu_bridge.set_visible(True)
-            self.menu_bridge.push_to_menu("select_tab", tab)
-
-    def _sacrifice_duplicate(self, species_id: str) -> None:
-        spawned = self.habitat.sacrifice_duplicate_and_spawn(species_id)
-        if spawned is None:
-            return
-        self.album.register(spawned)
-        self.selected_creature = None
-        self.last_sale_feedback = f"Nova criatura sorteada: {spawned.name}!"
-        self.last_sale_feedback_timer = 2.5
+        window_name = dict(ICON_ROW_BUTTONS).get(name)
+        if window_name is not None:
+            self.menu_bridge.push_to_menu("show_window", window_name)
 
     def _process_menu_commands(self) -> None:
         for name, payload in self.menu_bridge.drain_commands():
@@ -252,6 +245,21 @@ class App:
                 self._attempt_travel(destination)
             elif name == "sell_all":
                 self._sell_all()
+            elif name == "fuse":
+                self._fuse_creatures(*payload)
+
+    def _fuse_creatures(self, creature_id_a: int, creature_id_b: int) -> None:
+        spawned = self.habitat.fuse_creatures(creature_id_a, creature_id_b)
+        if spawned is None:
+            self.last_fusion_result = "Fusão falhou: escolha 2 criaturas diferentes."
+            return
+        self.album.register(spawned)
+        if self.selected_creature is not None and id(self.selected_creature) in (
+            creature_id_a,
+            creature_id_b,
+        ):
+            self.selected_creature = None
+        self.last_fusion_result = f"Fusão gerou: {spawned.name} ({spawned.rarity})!"
 
     def _publish_menu_snapshot(self) -> None:
         gold_multiplier = 1.0 + self.upgrades.effect_total(GOLD_PRODUCTION)
@@ -311,6 +319,11 @@ class App:
                 "species": entries,
             }
 
+        creatures_info = [
+            {"id": id(c), "name": c.species.name, "rarity": c.rarity}
+            for c in self.habitat.creatures
+        ]
+
         self.menu_bridge.publish(
             {
                 "gold": self.wallet.gold,
@@ -324,6 +337,8 @@ class App:
                 "always_on_top": self.always_on_top,
                 "upgrades": upgrades_info,
                 "planets": planets_info,
+                "creatures": creatures_info,
+                "last_fusion_result": self.last_fusion_result,
             }
         )
 
@@ -394,6 +409,7 @@ class App:
         self.last_sale_feedback_timer = 2.0
 
     def _update(self, dt: float) -> None:
+        self.animation_time += dt
         spawned = self.habitat.update(dt)
         if spawned:
             self.album.register(spawned)
@@ -464,16 +480,23 @@ class App:
     def _render_energy_bar(self) -> None:
         width, _ = self.surface.get_size()
         bar_width = min(200, width - 24)
-        bar_rect = pygame.Rect(12, 12, bar_width, 10)
-        pygame.draw.rect(self.surface, ENERGY_BAR_BG, bar_rect)
-        fill_rect = bar_rect.copy()
-        fill_rect.width = int(bar_rect.width * self.habitat.energy_ratio())
-        pygame.draw.rect(self.surface, ENERGY_BAR_COLOR, fill_rect)
+        bar_height = 18
+        bar_rect = pygame.Rect(12, 12, bar_width, bar_height)
+        draw_energy_bar(
+            self.surface,
+            bar_rect.x,
+            bar_rect.y,
+            bar_rect.width,
+            bar_rect.height,
+            self.habitat.energy_ratio(),
+            self.animation_time,
+        )
 
-        font = get_font("consolas", 11)
-        count_text = f"Criaturas: {len(self.habitat.creatures)}/{self.habitat.max_creatures}"
-        count_surf = font.render(count_text, True, (230, 230, 230))
-        self.surface.blit(count_surf, (bar_rect.right + 8, bar_rect.y - 1))
+        count_text = f"{len(self.habitat.creatures)}/{self.habitat.max_creatures}"
+        draw_stat_badge(
+            self.surface, bar_rect.right + 8, bar_rect.y - 1, "icon_paw", count_text,
+            icon_height=bar_height, font_size=13,
+        )
 
     def _render_hud(self) -> None:
         width, _ = self.surface.get_size()
@@ -481,14 +504,24 @@ class App:
         gold_per_second = (
             sum(c.gold_per_second for c in self.habitat.creatures) * gold_multiplier
         )
-        # Texto reduzido a só o essencial (ouro) — Baú/Upgrades/Nave/Álbum
-        # agora têm ícone próprio que abre o menu com o detalhe completo,
-        # então não precisa duplicar essa informação em texto solto aqui
-        # (pedido do dev: menos texto, mais ícones).
-        font = get_font("consolas", 15)
-        text = f"Ouro: {self.wallet.gold:.0f}   (+{gold_per_second:.0f}/s)"
-        surf = font.render(text, True, (255, 255, 255))
-        self.surface.blit(surf, (width - surf.get_width() - 16, 12))
+        # Selos (ícone + texto numa pilula escura) em vez de texto solto —
+        # Baú/Upgrades/Nave/Álbum já têm ícone próprio que abre o menu com
+        # o detalhe completo, então aqui só o essencial, compacto e com
+        # contraste garantido contra o cenário (pedido do dev: bonito,
+        # visível, sem poluir a UI).
+        badge_y = ICON_ROW_Y + ICON_BUTTON_HEIGHT + 6
+
+        gold_text = f"{self.wallet.gold:.0f}  (+{gold_per_second:.0f}/s)"
+        gold_rect = draw_stat_badge(
+            self.surface, width - 16, badge_y, "icon_coin", gold_text,
+            icon_height=20, font_size=15, align="right",
+        )
+
+        chest_text = f"{self.chest.total_count()}/{self.chest.capacity}"
+        chest_rect = draw_stat_badge(
+            self.surface, width - 16, gold_rect.bottom + 4, "icon_chest", chest_text,
+            icon_height=18, font_size=13, align="right",
+        )
 
         if self.last_sale_feedback and self.last_sale_feedback_timer > 0:
             feedback_font = get_font("consolas", 13)
@@ -496,7 +529,8 @@ class App:
                 self.last_sale_feedback, True, (255, 230, 140)
             )
             self.surface.blit(
-                feedback_surf, (width - feedback_surf.get_width() - 16, ICON_ROW_Y + ICON_BUTTON_HEIGHT + 4)
+                feedback_surf,
+                (width - feedback_surf.get_width() - 16, chest_rect.bottom + 4),
             )
 
     def _render_icon_row(self) -> None:
@@ -523,19 +557,17 @@ class App:
             x += icon.get_width() + ICON_BUTTON_GAP
 
     def _render_selection_panel(self) -> None:
-        self.sacrifice_button_rect = pygame.Rect(0, 0, 0, 0)
         if not self.selected_creature:
             return
         width, height = self.surface.get_size()
         species = self.selected_creature.species
-        has_duplicate = self.habitat.has_duplicate(species.id)
         font = get_font("consolas", 14)
         lines = [
             f"{species.name} ({species.rarity})",
             f"Produção: {species.base_gold_per_second} ouro/s",
             f"Item: {species.item_name} ({self.price_map[species.item_name]:.0f} ouro/un.)",
         ]
-        panel_height = 20 * len(lines) + 10 + (30 if has_duplicate else 0)
+        panel_height = 20 * len(lines) + 10
         panel_width = min(300, width - 20)
 
         # Painel aparece perto da criatura clicada (acima dela, ou abaixo
@@ -545,35 +577,34 @@ class App:
         top_margin = TOP_HUD_HEIGHT
         creature_x = int(self.selected_creature.x)
         sprite_top = creature_top_y(self.selected_creature)
+        sprite_bottom = int(self.selected_creature.y)
         panel_y = sprite_top - 6 - panel_height
-        if panel_y < top_margin:
-            panel_y = int(self.selected_creature.y) + 6
-        panel_x = min(max(creature_x - panel_width // 2, 10), width - 10 - panel_width)
+        fits_above = panel_y >= top_margin
+        fits_below = sprite_bottom + 6 + panel_height <= height - 10
+        if fits_above:
+            panel_x = min(max(creature_x - panel_width // 2, 10), width - 10 - panel_width)
+        elif fits_below:
+            panel_y = sprite_bottom + 6
+            panel_x = min(max(creature_x - panel_width // 2, 10), width - 10 - panel_width)
+        else:
+            # nem acima nem abaixo cabe (criatura ocupa quase toda a
+            # altura) — poe o painel do lado (direita, ou esquerda se nao
+            # houver espaco) em vez de por cima da criatura, senao a
+            # animacao de clique fica escondida atras do painel.
+            half_width = creature_half_width(self.selected_creature)
+            panel_y = min(max(sprite_top, top_margin), height - 10 - panel_height)
+            space_right = width - 10 - (creature_x + half_width + 8)
+            if space_right >= panel_width:
+                panel_x = int(creature_x + half_width + 8)
+            else:
+                panel_x = int(creature_x - half_width - 8 - panel_width)
+                panel_x = max(panel_x, 10)
         panel = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
         pygame.draw.rect(self.surface, (20, 20, 20), panel)
         pygame.draw.rect(self.surface, (255, 255, 255), panel, width=1)
         for i, line in enumerate(lines):
             surf = font.render(line, True, (255, 255, 255))
             self.surface.blit(surf, (panel.x + 8, panel.y + 8 + i * 20))
-
-        if has_duplicate:
-            self.sacrifice_button_rect = pygame.Rect(
-                panel.x + 8, panel.y + 8 + len(lines) * 20, panel.width - 16, 24
-            )
-            mouse_pos = pygame.mouse.get_pos()
-            color = (
-                SELL_BUTTON_HOVER
-                if self.sacrifice_button_rect.collidepoint(mouse_pos)
-                else SELL_BUTTON_COLOR
-            )
-            pygame.draw.rect(self.surface, color, self.sacrifice_button_rect, border_radius=4)
-            btn_font = get_font("consolas", 12, bold=True)
-            btn_label = btn_font.render(
-                "Usar duplicata p/ sortear nova", True, (30, 20, 0)
-            )
-            self.surface.blit(
-                btn_label, btn_label.get_rect(center=self.sacrifice_button_rect.center)
-            )
 
     def quit(self) -> None:
         self._save_game()

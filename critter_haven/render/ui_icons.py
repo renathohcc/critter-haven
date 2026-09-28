@@ -1,6 +1,7 @@
-"""Botões de ícone da HUD (Baú, Upgrades, Nave, Álbum, Vender Tudo).
-Carregados uma vez e reescalados com cache — a arte original vem em
-~50-170px, mas a barra overlay precisa deles bem menores."""
+"""Botões de ícone da HUD (Baú, Upgrades, Nave, Fusão, Álbum, Vender
+Tudo). Carregados uma vez e reescalados com cache — a arte já vem
+desenhada em ~76-320px (2x a altura de exibição, pra downscale nítido),
+mas a barra overlay precisa deles bem menores."""
 
 from __future__ import annotations
 
@@ -29,7 +30,10 @@ def get_button(name: str, target_height: int) -> pygame.Surface:
         source = _load_source(name)
         scale = target_height / source.get_height()
         target_width = max(1, round(source.get_width() * scale))
-        _scaled_cache[key] = pygame.transform.smoothscale(
+        # scale (nearest-neighbor), nao smoothscale: a arte e pixel-art, e
+        # o antialiasing do smoothscale borrava os contornos ao reduzir de
+        # ~50-170px pra ~48px, deixando os icones com aspecto "derretido".
+        _scaled_cache[key] = pygame.transform.scale(
             source, (target_width, target_height)
         )
     return _scaled_cache[key]

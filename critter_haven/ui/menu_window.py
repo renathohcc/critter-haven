@@ -1,8 +1,13 @@
-"""Janela de menu separada (Tkinter, thread própria) com o painel
-completo do habitat: stats, upgrades, nave e álbum. Roda numa thread
+"""Janelas de menu separadas (Tkinter, thread própria): Baú, Upgrades,
+Nave, Fusão e Álbum são janelas Tkinter independentes, cada uma aberta e
+fechada isoladamente pelo respectivo ícone na HUD. Roda numa thread
 dedicada; toda comunicação com o jogo (Pygame, thread principal) passa
 pelo MenuBridge — nunca lemos/escrevemos o estado do jogo diretamente
 aqui.
+
+O Álbum (`critter_haven.ui.album_window.AlbumWindow`) é o único que
+foge do padrão ttk genérico — é um livro em pixel art desenhado à mão
+num Canvas, sem moldura do Windows.
 """
 
 from __future__ import annotations
@@ -13,42 +18,60 @@ from tkinter import ttk
 from critter_haven.config.planets import PLANETS
 from critter_haven.config.upgrades import UPGRADES
 from critter_haven.core.menu_bridge import MenuBridge
-from critter_haven.data.species import load_planet_safe
+from critter_haven.ui.album_window import AlbumWindow
 
 POLL_INTERVAL_MS = 200
 
 RARITY_LABEL = {"common": "Comum", "rare": "Rara", "special": "Especial"}
 
 
-class MenuWindow:
-    def __init__(self, root: tk.Tk, bridge: MenuBridge) -> None:
-        self.root = root
-        self.bridge = bridge
-        self.root.title("Critter Haven — Menu")
-        self.root.geometry("560x640")
-        self.root.minsize(480, 520)
-        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+class MenuToplevel:
+    """Base comum para uma janela de menu independente: começa escondida,
+    aparece/some conforme `bridge.is_window_visible(window_name)` e nunca
+    é destruída, só escondida (fechar = esconder, não sair do jogo)."""
 
-        self._build_widgets()
-        self._poll()
+    window_name = ""
+    title = ""
+    geometry = "420x480"
+    minsize = (360, 360)
+
+    def __init__(self, root: tk.Tk, bridge: MenuBridge) -> None:
+        self.bridge = bridge
+        self.top = tk.Toplevel(root)
+        self.top.title(self.title)
+        self.top.geometry(self.geometry)
+        self.top.minsize(*self.minsize)
+        self.top.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.top.withdraw()
+        self._build_widgets(self.top)
 
     def _on_close(self) -> None:
-        self.bridge.set_visible(False)
-        self.root.withdraw()
+        self.bridge.hide_window(self.window_name)
+        self.top.withdraw()
 
-    def _build_widgets(self) -> None:
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill="both", expand=True, padx=6, pady=6)
+    def sync_visibility(self) -> None:
+        should_show = self.bridge.is_window_visible(self.window_name)
+        is_mapped = bool(self.top.winfo_ismapped())
+        if should_show and not is_mapped:
+            self.top.deiconify()
+            self.top.lift()
+        elif not should_show and is_mapped:
+            self.top.withdraw()
 
-        self.habitat_tab = ttk.Frame(self.notebook)
-        self.album_tab = ttk.Frame(self.notebook)
-        self.notebook.add(self.habitat_tab, text="Habitat")
-        self.notebook.add(self.album_tab, text="Álbum")
+    def _build_widgets(self, parent: tk.Toplevel) -> None:
+        raise NotImplementedError
 
-        self._build_habitat_tab(self.habitat_tab)
-        self._build_album_tab(self.album_tab)
+    def refresh(self, snapshot: dict) -> None:
+        raise NotImplementedError
 
-    def _build_habitat_tab(self, parent: ttk.Frame) -> None:
+
+class BauWindow(MenuToplevel):
+    window_name = "bau"
+    title = "Critter Haven — Baú"
+    geometry = "360x360"
+    minsize = (320, 300)
+
+    def _build_widgets(self, parent: tk.Toplevel) -> None:
         stats = ttk.LabelFrame(parent, text="Habitat")
         stats.pack(fill="x", padx=8, pady=6)
         self.gold_label = ttk.Label(stats, text="Ouro: -", anchor="w")
@@ -68,15 +91,32 @@ class MenuWindow:
             controls, text="Fixar", command=lambda: self.bridge.push_command("toggle_pin")
         )
         self.pin_button.pack(side="left", padx=6, pady=6)
-        self.album_button = ttk.Button(
-            controls,
-            text="Álbum",
-            command=lambda: self.notebook.select(self.album_tab),
-        )
-        self.album_button.pack(side="left", padx=6, pady=6)
 
+    def refresh(self, snapshot: dict) -> None:
+        self.gold_label.config(
+            text=f"Ouro: {snapshot['gold']:.0f}   (+{snapshot['gold_per_second']:.0f}/s)"
+        )
+        self.creatures_label.config(
+            text=f"Criaturas: {snapshot['creature_count']}/{snapshot['max_creatures']}"
+        )
+        self.chest_label.config(
+            text=f"Baú: {snapshot['chest_count']}/{snapshot['chest_capacity']} itens"
+        )
+        self.size_button.config(text=f"Tamanho: {snapshot['window_state']}")
+        self.pin_button.config(
+            text=f"Fixar: {'ON' if snapshot['always_on_top'] else 'OFF'}"
+        )
+
+
+class UpgradesWindow(MenuToplevel):
+    window_name = "upgrades"
+    title = "Critter Haven — Upgrades"
+    geometry = "420x420"
+    minsize = (360, 320)
+
+    def _build_widgets(self, parent: tk.Toplevel) -> None:
         upgrades_frame = ttk.LabelFrame(parent, text="Upgrades")
-        upgrades_frame.pack(fill="x", padx=8, pady=6)
+        upgrades_frame.pack(fill="both", expand=True, padx=8, pady=6)
         self.upgrade_rows: dict[str, dict[str, tk.Widget]] = {}
         for upgrade in UPGRADES:
             row = ttk.Frame(upgrades_frame)
@@ -92,7 +132,30 @@ class MenuWindow:
             button.pack(side="right")
             self.upgrade_rows[upgrade.id] = {"label": label, "button": button}
 
-        ship_frame = ttk.LabelFrame(parent, text="Nave — Destinos")
+    def refresh(self, snapshot: dict) -> None:
+        for upgrade in UPGRADES:
+            info = snapshot["upgrades"][upgrade.id]
+            widgets = self.upgrade_rows[upgrade.id]
+            widgets["label"].config(text=f"{upgrade.name} (nv {info['level']}/{upgrade.max_level})")
+            if info["cost"] is None:
+                widgets["button"].config(text="MAX")
+                widgets["button"].state(["disabled"])
+            else:
+                widgets["button"].config(text=f"{info['cost']:.0f} ouro")
+                if info["can_afford"]:
+                    widgets["button"].state(["!disabled"])
+                else:
+                    widgets["button"].state(["disabled"])
+
+
+class NaveWindow(MenuToplevel):
+    window_name = "nave"
+    title = "Critter Haven — Nave"
+    geometry = "440x420"
+    minsize = (360, 320)
+
+    def _build_widgets(self, parent: tk.Toplevel) -> None:
+        ship_frame = ttk.LabelFrame(parent, text="Destinos")
         ship_frame.pack(fill="both", expand=True, padx=8, pady=6)
         self.ship_rows: dict[str, dict[str, tk.Widget]] = {}
         for planet in PLANETS:
@@ -105,7 +168,7 @@ class MenuWindow:
             )
             name_label.pack(fill="x")
             status_label = ttk.Label(
-                info, text="", anchor="w", justify="left", wraplength=340
+                info, text="", anchor="w", justify="left", wraplength=300
             )
             status_label.pack(fill="x")
             button = ttk.Button(
@@ -123,97 +186,7 @@ class MenuWindow:
                 "button": button,
             }
 
-    def _build_album_tab(self, parent: ttk.Frame) -> None:
-        planet_notebook = ttk.Notebook(parent)
-        planet_notebook.pack(fill="both", expand=True, padx=6, pady=6)
-
-        self.album_progress_labels: dict[str, ttk.Label] = {}
-        self.album_species_widgets: dict[str, dict[str, tk.Widget]] = {}
-
-        for planet in PLANETS:
-            tab = ttk.Frame(planet_notebook)
-            planet_notebook.add(tab, text=planet.name)
-
-            progress_label = ttk.Label(tab, text="0/0 catalogadas", anchor="w")
-            progress_label.pack(fill="x", padx=6, pady=(6, 2))
-            self.album_progress_labels[planet.id] = progress_label
-
-            species_pool = load_planet_safe(planet.id)
-            if not species_pool:
-                ttk.Label(
-                    tab,
-                    text="Nenhuma criatura definida ainda (conteúdo pós-demo).",
-                    anchor="w",
-                    foreground="#888888",
-                ).pack(fill="x", padx=6, pady=6)
-                continue
-
-            for species in species_pool:
-                card = ttk.LabelFrame(tab, text="???")
-                card.pack(fill="x", padx=6, pady=4)
-                detail_label = ttk.Label(
-                    card, text="Ainda não descoberto.", anchor="w", justify="left", wraplength=440
-                )
-                detail_label.pack(fill="x", padx=6, pady=4)
-                self.album_species_widgets[species.id] = {
-                    "card": card,
-                    "detail": detail_label,
-                }
-
-    def _poll(self) -> None:
-        if self.bridge.stop_event.is_set():
-            self.root.destroy()
-            return
-
-        should_show = self.bridge.is_visible()
-        is_mapped = bool(self.root.winfo_ismapped())
-        if should_show and not is_mapped:
-            self.root.deiconify()
-        elif not should_show and is_mapped:
-            self.root.withdraw()
-
-        for name, payload in self.bridge.drain_to_menu_commands():
-            if name == "select_tab":
-                tab = self.album_tab if payload == "album" else self.habitat_tab
-                self.notebook.select(tab)
-                self.root.lift()
-
-        if should_show:
-            self._refresh(self.bridge.read_snapshot())
-
-        self.root.after(POLL_INTERVAL_MS, self._poll)
-
-    def _refresh(self, snapshot: dict) -> None:
-        if not snapshot:
-            return
-        self.gold_label.config(
-            text=f"Ouro: {snapshot['gold']:.0f}   (+{snapshot['gold_per_second']:.0f}/s)"
-        )
-        self.creatures_label.config(
-            text=f"Criaturas: {snapshot['creature_count']}/{snapshot['max_creatures']}"
-        )
-        self.chest_label.config(
-            text=f"Baú: {snapshot['chest_count']}/{snapshot['chest_capacity']} itens"
-        )
-        self.size_button.config(text=f"Tamanho: {snapshot['window_state']}")
-        self.pin_button.config(
-            text=f"Fixar: {'ON' if snapshot['always_on_top'] else 'OFF'}"
-        )
-
-        for upgrade in UPGRADES:
-            info = snapshot["upgrades"][upgrade.id]
-            widgets = self.upgrade_rows[upgrade.id]
-            widgets["label"].config(text=f"{upgrade.name} (nv {info['level']}/{upgrade.max_level})")
-            if info["cost"] is None:
-                widgets["button"].config(text="MAX")
-                widgets["button"].state(["disabled"])
-            else:
-                widgets["button"].config(text=f"{info['cost']:.0f} ouro")
-                if info["can_afford"]:
-                    widgets["button"].state(["!disabled"])
-                else:
-                    widgets["button"].state(["disabled"])
-
+    def refresh(self, snapshot: dict) -> None:
         for planet in PLANETS:
             info = snapshot["planets"][planet.id]
             widgets = self.ship_rows[planet.id]
@@ -225,37 +198,121 @@ class MenuWindow:
             else:
                 widgets["button"].state(["disabled"])
 
-        self._refresh_album(snapshot.get("album", {}))
 
-    def _refresh_album(self, album_snapshot: dict) -> None:
-        for planet in PLANETS:
-            info = album_snapshot.get(planet.id)
-            if not info:
-                continue
-            self.album_progress_labels[planet.id].config(
-                text=f"{info['discovered']}/{info['total']} catalogadas"
-            )
-            for entry in info["species"]:
-                widgets = self.album_species_widgets.get(entry["id"])
-                if not widgets:
-                    continue
-                if entry["discovered"]:
-                    widgets["card"].config(text=entry["name"])
-                    rarity = RARITY_LABEL.get(entry["rarity"], entry["rarity"])
-                    widgets["detail"].config(
-                        text=(
-                            f"Raridade: {rarity}   Produção: {entry['gold_per_second']} ouro/s\n"
-                            f"Item: {entry['item_name']}\n\n"
-                            f"“{entry['description']}”"
-                        )
-                    )
-                else:
-                    widgets["card"].config(text="???")
-                    widgets["detail"].config(text="Ainda não descoberto.")
+class FusionWindow(MenuToplevel):
+    window_name = "fusion"
+    title = "Critter Haven — Fusão"
+    geometry = "380x460"
+    minsize = (340, 380)
+
+    def _build_widgets(self, parent: tk.Toplevel) -> None:
+        ttk.Label(
+            parent,
+            text="Selecione 2 criaturas para fundir e sortear uma nova.",
+            anchor="w",
+            justify="left",
+            wraplength=340,
+        ).pack(fill="x", padx=8, pady=(8, 4))
+
+        list_frame = ttk.Frame(parent)
+        list_frame.pack(fill="both", expand=True, padx=8, pady=4)
+        scrollbar = ttk.Scrollbar(list_frame, orient="vertical")
+        self.listbox = tk.Listbox(
+            list_frame,
+            selectmode=tk.MULTIPLE,
+            exportselection=False,
+            yscrollcommand=scrollbar.set,
+        )
+        scrollbar.config(command=self.listbox.yview)
+        self.listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        self.listbox.bind("<<ListboxSelect>>", self._on_selection_change)
+
+        self.fuse_button = ttk.Button(
+            parent, text="Fundir (consome as 2)", command=self._on_fuse_clicked
+        )
+        self.fuse_button.pack(fill="x", padx=8, pady=6)
+        self.fuse_button.state(["disabled"])
+
+        self.result_label = ttk.Label(
+            parent, text="", anchor="w", justify="left", wraplength=340, foreground="#2a6b2a"
+        )
+        self.result_label.pack(fill="x", padx=8, pady=(0, 8))
+
+        self._creature_ids: list[int] = []
+        self._last_snapshot_ids: list[int] | None = None
+
+    def _on_selection_change(self, _event=None) -> None:
+        selected = self.listbox.curselection()
+        if len(selected) > 2:
+            # só deixa marcar 2 -- desmarca a mais antiga selecionada em vez
+            # de travar a UI, assim o jogador so precisa clicar na proxima.
+            self.listbox.selection_clear(selected[0])
+            selected = self.listbox.curselection()
+        if len(selected) == 2:
+            self.fuse_button.state(["!disabled"])
+        else:
+            self.fuse_button.state(["disabled"])
+
+    def _on_fuse_clicked(self) -> None:
+        selected = self.listbox.curselection()
+        if len(selected) != 2:
+            return
+        id_a = self._creature_ids[selected[0]]
+        id_b = self._creature_ids[selected[1]]
+        self.bridge.push_command("fuse", (id_a, id_b))
+        self.listbox.selection_clear(0, tk.END)
+        self.fuse_button.state(["disabled"])
+
+    def refresh(self, snapshot: dict) -> None:
+        creatures = snapshot.get("creatures", [])
+        ids = [entry["id"] for entry in creatures]
+        # só reconstrói a lista quando o conjunto de criaturas realmente
+        # mudou -- senão a cada poll (200ms) a selecao do jogador seria
+        # apagada antes de ele conseguir clicar em "Fundir".
+        if ids != self._last_snapshot_ids:
+            self._last_snapshot_ids = ids
+            self._creature_ids = ids
+            self.listbox.delete(0, tk.END)
+            for entry in creatures:
+                rarity = RARITY_LABEL.get(entry["rarity"], entry["rarity"])
+                self.listbox.insert(tk.END, f"{entry['name']} ({rarity})")
+            self.fuse_button.state(["disabled"])
+
+        result = snapshot.get("last_fusion_result")
+        if result:
+            self.result_label.config(text=result)
+
+
+WINDOW_CLASSES = (BauWindow, UpgradesWindow, NaveWindow, AlbumWindow, FusionWindow)
 
 
 def run_menu_window(bridge: MenuBridge) -> None:
     root = tk.Tk()
     root.withdraw()
-    MenuWindow(root, bridge)
+
+    windows = {cls.window_name: cls(root, bridge) for cls in WINDOW_CLASSES}
+
+    def poll() -> None:
+        if bridge.stop_event.is_set():
+            root.destroy()
+            return
+
+        for name, payload in bridge.drain_to_menu_commands():
+            if name == "show_window":
+                bridge.show_window(payload)
+
+        for menu_window in windows.values():
+            menu_window.sync_visibility()
+
+        if any(bridge.is_window_visible(name) for name in windows):
+            snapshot = bridge.read_snapshot()
+            if snapshot:
+                for name, menu_window in windows.items():
+                    if bridge.is_window_visible(name):
+                        menu_window.refresh(snapshot)
+
+        root.after(POLL_INTERVAL_MS, poll)
+
+    poll()
     root.mainloop()

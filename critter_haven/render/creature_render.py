@@ -83,6 +83,15 @@ def creature_top_y(creature: Creature) -> float:
     return creature.y - RADIUS * 2
 
 
+def creature_half_width(creature: Creature) -> float:
+    """Metade da largura aproximada do sprite na tela — usado pra
+    posicionar UI ao lado da criatura sem cobrir ela."""
+    sheet = load_creature_sheet(creature.species.id)
+    if sheet is not None:
+        return sheet.frame_width / 2
+    return RADIUS
+
+
 def _draw_placeholder(
     surface: pygame.Surface, creature: Creature, center: tuple[int, int]
 ) -> None:

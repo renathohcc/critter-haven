@@ -3,6 +3,7 @@ import random
 from critter_haven.data.species import load_planet
 from critter_haven.entities.creature import Creature
 from critter_haven.entities.habitat import Habitat
+from critter_haven.systems.spawn_system import fusion_key, roll_rarity_for_fusion
 
 
 def get_species(species_id: str):
@@ -13,61 +14,72 @@ def make_habitat() -> Habitat:
     return Habitat(planet="elyndor", species_pool=load_planet("elyndor"))
 
 
-def test_has_duplicate_false_with_single_creature():
+def add_creature(habitat: Habitat, species_id: str, x: float = 0.0) -> Creature:
+    creature = Creature(species=get_species(species_id), x=x, y=0)
+    habitat.creatures.append(creature)
+    return creature
+
+
+def test_can_fuse_requires_two_distinct_living_creatures():
     habitat = make_habitat()
-    habitat.creatures.append(Creature(species=get_species("mossnib"), x=0, y=0))
-    assert habitat.has_duplicate("mossnib") is False
+    a = add_creature(habitat, "mossnib", 0)
+    b = add_creature(habitat, "pebblit", 10)
+
+    assert habitat.can_fuse(id(a), id(b)) is True
+    assert habitat.can_fuse(id(a), id(a)) is False
+    assert habitat.can_fuse(id(a), 999999) is False
 
 
-def test_has_duplicate_true_with_two_of_same_species():
+def test_fuse_creatures_consumes_both_regardless_of_species():
     habitat = make_habitat()
-    habitat.creatures.append(Creature(species=get_species("mossnib"), x=0, y=0))
-    habitat.creatures.append(Creature(species=get_species("mossnib"), x=10, y=0))
-    assert habitat.has_duplicate("mossnib") is True
+    a = add_creature(habitat, "mossnib", 0)
+    b = add_creature(habitat, "breezel", 10)
 
-
-def test_release_duplicate_removes_one_and_keeps_the_rest():
-    habitat = make_habitat()
-    habitat.creatures.append(Creature(species=get_species("mossnib"), x=0, y=0))
-    habitat.creatures.append(Creature(species=get_species("mossnib"), x=10, y=0))
-
-    assert habitat.release_duplicate("mossnib") is True
-    assert habitat.count_of("mossnib") == 1
-
-
-def test_release_duplicate_fails_without_a_second_copy():
-    habitat = make_habitat()
-    habitat.creatures.append(Creature(species=get_species("mossnib"), x=0, y=0))
-    assert habitat.release_duplicate("mossnib") is False
-    assert habitat.count_of("mossnib") == 1
-
-
-def test_sacrifice_duplicate_and_spawn_frees_space_and_rolls_new_species():
-    habitat = make_habitat()
-    habitat.creatures.append(Creature(species=get_species("mossnib"), x=0, y=0))
-    habitat.creatures.append(Creature(species=get_species("mossnib"), x=10, y=0))
-
-    result = habitat.sacrifice_duplicate_and_spawn("mossnib")
+    result = habitat.fuse_creatures(id(a), id(b))
 
     assert result is not None
-    assert len(habitat.creatures) == 2  # removeu 1 duplicata, sorteou 1 nova
+    # removeu as 2 usadas na fusao + adicionou 1 sorteada = 1
+    assert len(habitat.creatures) == 1
+    assert a not in habitat.creatures
+    assert b not in habitat.creatures
 
 
-def test_sacrifice_duplicate_fails_without_duplicate():
+def test_fuse_creatures_fails_with_invalid_ids():
     habitat = make_habitat()
-    habitat.creatures.append(Creature(species=get_species("mossnib"), x=0, y=0))
-    assert habitat.sacrifice_duplicate_and_spawn("mossnib") is None
+    a = add_creature(habitat, "mossnib", 0)
+
+    assert habitat.fuse_creatures(id(a), 999999) is None
     assert len(habitat.creatures) == 1
 
 
-def test_sacrifice_can_work_even_when_habitat_is_full():
+def test_fuse_can_work_even_when_habitat_is_full():
     habitat = make_habitat()
     habitat.max_creatures = 2
-    habitat.creatures.append(Creature(species=get_species("mossnib"), x=0, y=0))
-    habitat.creatures.append(Creature(species=get_species("mossnib"), x=10, y=0))
+    a = add_creature(habitat, "mossnib", 0)
+    b = add_creature(habitat, "pebblit", 10)
     assert habitat.is_full
 
-    result = habitat.sacrifice_duplicate_and_spawn("mossnib")
+    result = habitat.fuse_creatures(id(a), id(b))
 
     assert result is not None
-    assert len(habitat.creatures) == 2
+    assert len(habitat.creatures) == 1
+
+
+def test_fusion_key_is_order_independent():
+    assert fusion_key("common", "special") == fusion_key("special", "common")
+
+
+def test_fusing_rarer_creatures_skews_rarity_upward():
+    rng = random.Random(42)
+    samples = 4000
+    common_common_rolls = [
+        roll_rarity_for_fusion("common", "common", rng) for _ in range(samples)
+    ]
+    special_special_rolls = [
+        roll_rarity_for_fusion("special", "special", rng) for _ in range(samples)
+    ]
+
+    common_special_rate = common_common_rolls.count("special") / samples
+    special_special_rate = special_special_rolls.count("special") / samples
+
+    assert special_special_rate > common_special_rate
