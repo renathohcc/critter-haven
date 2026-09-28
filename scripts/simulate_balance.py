@@ -73,18 +73,17 @@ def run_simulation(hours: float) -> dict:
         if habitat.is_full and "habitat_full" not in milestones:
             milestones["habitat_full"] = second
 
-        # jogador heurístico: usa duplicatas como recurso pra continuar
-        # descobrindo espécies novas em vez de deixar o habitat travado
+        # jogador heurístico: funde as duas primeiras criaturas disponíveis
+        # como recurso pra continuar descobrindo espécies novas em vez de
+        # deixar o habitat travado
         discovered, total = album.progress(species_pool)
-        if discovered < total:
-            for species in species_pool:
-                if habitat.has_duplicate(species.id):
-                    spawned = habitat.sacrifice_duplicate_and_spawn(species.id)
-                    if spawned:
-                        was_new = album.register(spawned)
-                        if was_new and f"first_{spawned.id}" not in milestones:
-                            milestones[f"first_{spawned.id}"] = second
-                    break
+        if discovered < total and len(habitat.creatures) >= 2:
+            id_a, id_b = id(habitat.creatures[0]), id(habitat.creatures[1])
+            spawned = habitat.fuse_creatures(id_a, id_b)
+            if spawned:
+                was_new = album.register(spawned)
+                if was_new and f"first_{spawned.id}" not in milestones:
+                    milestones[f"first_{spawned.id}"] = second
 
         if album.progress(species_pool) == (len(species_pool), len(species_pool)):
             if "album_complete" not in milestones:

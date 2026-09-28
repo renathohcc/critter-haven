@@ -10,9 +10,9 @@ def test_roll_rarity_distribution_matches_weights():
     for _ in range(20000):
         counts[roll_rarity(rng)] += 1
     total = sum(counts.values())
-    assert 0.65 < counts["common"] / total < 0.75
-    assert 0.20 < counts["rare"] / total < 0.30
-    assert 0.02 < counts["special"] / total < 0.08
+    assert 0.80 < counts["common"] / total < 0.90
+    assert 0.08 < counts["rare"] / total < 0.18
+    assert 0.005 < counts["special"] / total < 0.045
 
 
 def test_roll_species_returns_species_of_pool():

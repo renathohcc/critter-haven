@@ -12,7 +12,7 @@ from critter_haven.config.spawn import (
     ENERGY_PER_SECOND,
 )
 from critter_haven.entities.creature import Creature
-from critter_haven.systems.spawn_system import roll_species
+from critter_haven.systems.spawn_system import roll_species, roll_species_for_fusion
 from critter_haven.data.species import Species
 
 
@@ -61,6 +61,9 @@ class Habitat:
 
     def _spawn(self) -> Species:
         species = roll_species(self.species_pool)
+        return self._place_creature(species)
+
+    def _place_creature(self, species: Species) -> Species:
         roam_min, roam_max = self._roam_bounds_for(species.id)
 
         if species.id in STATIONARY_SPECIES:
@@ -113,29 +116,42 @@ class Habitat:
     def count_of(self, species_id: str) -> int:
         return sum(1 for c in self.creatures if c.species.id == species_id)
 
-    def has_duplicate(self, species_id: str) -> bool:
-        return self.count_of(species_id) >= 2
+    def creature_by_id(self, creature_id: int) -> Creature | None:
+        """Acha a criatura viva cujo `id(objeto)` é `creature_id`. Usado
+        pela Fusão (Fase 8.6 revisão): a janela Tkinter só conhece um
+        snapshot com ids/nomes/raridades, nunca os objetos de verdade
+        (threads diferentes), então o comando de fusão chega como um par
+        de ids que precisa ser resolvido de volta pra criatura aqui."""
+        for creature in self.creatures:
+            if id(creature) == creature_id:
+                return creature
+        return None
 
-    def release_duplicate(self, species_id: str) -> bool:
-        """Remove uma criatura duplicada (mantendo ao menos uma da espécie)
-        para abrir espaço no habitat. Retorna False se não há duplicata."""
-        if not self.has_duplicate(species_id):
+    def can_fuse(self, creature_id_a: int, creature_id_b: int) -> bool:
+        if creature_id_a == creature_id_b:
             return False
-        for i, creature in enumerate(self.creatures):
-            if creature.species.id == species_id:
-                del self.creatures[i]
-                return True
-        return False
+        return (
+            self.creature_by_id(creature_id_a) is not None
+            and self.creature_by_id(creature_id_b) is not None
+        )
 
-    def sacrifice_duplicate_and_spawn(self, species_id: str) -> Species | None:
-        """Usa uma criatura duplicada como recurso: libera espaço e sorteia
-        uma nova criatura na hora, sem esperar a energia encher.
+    def fuse_creatures(self, creature_id_a: int, creature_id_b: int) -> Species | None:
+        """Fusão (Fase 8.6 revisão): consome DUAS criaturas quaisquer do
+        habitat — de espécies iguais ou diferentes, não precisa mais ser
+        duplicata da mesma espécie — e sorteia uma nova criatura.
 
-        Resolve o problema de descoberta travada pela capacidade do habitat
-        — decisão de balanceamento tomada com o dev (Fase 8): em vez de
-        aumentar infinitamente a capacidade, duplicatas viram um recurso
-        de progressão que o jogador já acumula naturalmente jogando.
+        A raridade sorteada depende da combinação das raridades das duas
+        criaturas usadas (ver `FUSION_RARITY_WEIGHTS`): fundir duas
+        criaturas raras/especiais aumenta bastante a chance do resultado
+        também ser raro/especial, recompensando quem investe as melhores
+        criaturas na fusão em vez de só as comuns.
         """
-        if not self.release_duplicate(species_id):
+        if not self.can_fuse(creature_id_a, creature_id_b):
             return None
-        return self.spawn_one()
+        creature_a = self.creature_by_id(creature_id_a)
+        creature_b = self.creature_by_id(creature_id_b)
+        rarity_a, rarity_b = creature_a.rarity, creature_b.rarity
+        self.creatures.remove(creature_a)
+        self.creatures.remove(creature_b)
+        species = roll_species_for_fusion(self.species_pool, rarity_a, rarity_b)
+        return self._place_creature(species)
