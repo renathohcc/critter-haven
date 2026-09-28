@@ -23,7 +23,7 @@ from critter_haven.core import window
 from critter_haven.core.menu_bridge import MenuBridge
 from critter_haven.data.species import all_species_by_id, load_planet, load_planet_safe
 from critter_haven.economy.chest import Chest
-from critter_haven.economy.pricing import build_price_map, sell_all
+from critter_haven.economy.pricing import build_price_map, sell_all, sell_item
 from critter_haven.economy.upgrades import UpgradeManager
 from critter_haven.economy.wallet import Wallet
 from critter_haven.entities.album import Album
@@ -73,6 +73,7 @@ ICON_ROW_BUTTONS = (
     ("btn_nave", "nave"),
     ("btn_fusao", "fusion"),
     ("btn_album", "album"),
+    ("btn_config", "config"),
 )
 TOP_HUD_HEIGHT = ICON_ROW_Y + ICON_BUTTON_HEIGHT + 6 + 95  # icones + selos de ouro/bau/venda
 
@@ -245,6 +246,9 @@ class App:
                 self._attempt_travel(destination)
             elif name == "sell_all":
                 self._sell_all()
+            elif name == "sell_item":
+                item_name, quantity = payload
+                sell_item(self.chest, self.wallet, self.price_map, item_name, quantity)
             elif name == "fuse":
                 self._fuse_creatures(*payload)
 
@@ -324,6 +328,21 @@ class App:
             for c in self.habitat.creatures
         ]
 
+        # detalhamento por item (Fase 8.6: Baú vende item a item, nao so
+        # tudo de uma vez) -- sempre lista todas as especies do habitat,
+        # mesmo com 0 no baú, pra o jogador ver todas as categorias.
+        chest_items_info = [
+            {
+                "item_name": species.item_name,
+                "species_id": species.id,
+                "species_name": species.name,
+                "rarity": species.rarity,
+                "count": self.chest.items.get(species.item_name, 0),
+                "price": self.price_map.get(species.item_name, 0.0),
+            }
+            for species in self.habitat.species_pool
+        ]
+
         self.menu_bridge.publish(
             {
                 "gold": self.wallet.gold,
@@ -332,6 +351,7 @@ class App:
                 "max_creatures": self.habitat.max_creatures,
                 "chest_count": self.chest.total_count(),
                 "chest_capacity": self.chest.capacity,
+                "chest_items": chest_items_info,
                 "window_state": self.window_state.name,
                 "album": album_info,
                 "always_on_top": self.always_on_top,

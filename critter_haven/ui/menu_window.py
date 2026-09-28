@@ -5,9 +5,10 @@ dedicada; toda comunicação com o jogo (Pygame, thread principal) passa
 pelo MenuBridge — nunca lemos/escrevemos o estado do jogo diretamente
 aqui.
 
-O Álbum (`critter_haven.ui.album_window.AlbumWindow`) é o único que
-foge do padrão ttk genérico — é um livro em pixel art desenhado à mão
-num Canvas, sem moldura do Windows.
+Álbum e Baú (`critter_haven.ui.album_window.AlbumWindow`,
+`critter_haven.ui.chest_window.ChestWindow`) fogem do padrão ttk
+genérico — são pixel art desenhada à mão num Canvas, sem moldura do
+Windows. Os demais ainda usam ttk (Fase 8.6 vai migrá-los também).
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from critter_haven.config.planets import PLANETS
 from critter_haven.config.upgrades import UPGRADES
 from critter_haven.core.menu_bridge import MenuBridge
 from critter_haven.ui.album_window import AlbumWindow
+from critter_haven.ui.chest_window import ChestWindow
 
 POLL_INTERVAL_MS = 200
 
@@ -65,43 +67,38 @@ class MenuToplevel:
         raise NotImplementedError
 
 
-class BauWindow(MenuToplevel):
-    window_name = "bau"
-    title = "Critter Haven — Baú"
-    geometry = "360x360"
-    minsize = (320, 300)
+class ConfigWindow(MenuToplevel):
+    """Configurações gerais (tamanho da janela, fixar sempre-no-topo) —
+    antes viviam dentro do Baú, mas agora tem espaço próprio pensando em
+    futuras opções (áudio, música, etc. -- Fase 9+)."""
+
+    window_name = "config"
+    title = "Critter Haven — Configurações"
+    geometry = "340x260"
+    minsize = (300, 220)
 
     def _build_widgets(self, parent: tk.Toplevel) -> None:
-        stats = ttk.LabelFrame(parent, text="Habitat")
-        stats.pack(fill="x", padx=8, pady=6)
-        self.gold_label = ttk.Label(stats, text="Ouro: -", anchor="w")
-        self.gold_label.pack(fill="x", padx=6, pady=2)
-        self.creatures_label = ttk.Label(stats, text="Criaturas: -", anchor="w")
-        self.creatures_label.pack(fill="x", padx=6, pady=2)
-        self.chest_label = ttk.Label(stats, text="Baú: -", anchor="w")
-        self.chest_label.pack(fill="x", padx=6, pady=2)
-
-        controls = ttk.LabelFrame(parent, text="Janela")
-        controls.pack(fill="x", padx=8, pady=6)
+        window_frame = ttk.LabelFrame(parent, text="Janela")
+        window_frame.pack(fill="x", padx=10, pady=10)
         self.size_button = ttk.Button(
-            controls, text="Tamanho", command=lambda: self.bridge.push_command("cycle_size")
+            window_frame, text="Tamanho", command=lambda: self.bridge.push_command("cycle_size")
         )
-        self.size_button.pack(side="left", padx=6, pady=6)
+        self.size_button.pack(fill="x", padx=8, pady=6)
         self.pin_button = ttk.Button(
-            controls, text="Fixar", command=lambda: self.bridge.push_command("toggle_pin")
+            window_frame, text="Fixar", command=lambda: self.bridge.push_command("toggle_pin")
         )
-        self.pin_button.pack(side="left", padx=6, pady=6)
+        self.pin_button.pack(fill="x", padx=8, pady=6)
+
+        future_frame = ttk.LabelFrame(parent, text="Áudio (em breve)")
+        future_frame.pack(fill="x", padx=10, pady=10)
+        ttk.Label(
+            future_frame,
+            text="Música e efeitos sonoros ainda não implementados.",
+            foreground="#888888",
+            wraplength=280,
+        ).pack(fill="x", padx=8, pady=8)
 
     def refresh(self, snapshot: dict) -> None:
-        self.gold_label.config(
-            text=f"Ouro: {snapshot['gold']:.0f}   (+{snapshot['gold_per_second']:.0f}/s)"
-        )
-        self.creatures_label.config(
-            text=f"Criaturas: {snapshot['creature_count']}/{snapshot['max_creatures']}"
-        )
-        self.chest_label.config(
-            text=f"Baú: {snapshot['chest_count']}/{snapshot['chest_capacity']} itens"
-        )
         self.size_button.config(text=f"Tamanho: {snapshot['window_state']}")
         self.pin_button.config(
             text=f"Fixar: {'ON' if snapshot['always_on_top'] else 'OFF'}"
@@ -284,7 +281,7 @@ class FusionWindow(MenuToplevel):
             self.result_label.config(text=result)
 
 
-WINDOW_CLASSES = (BauWindow, UpgradesWindow, NaveWindow, AlbumWindow, FusionWindow)
+WINDOW_CLASSES = (ChestWindow, UpgradesWindow, NaveWindow, AlbumWindow, FusionWindow, ConfigWindow)
 
 
 def run_menu_window(bridge: MenuBridge) -> None:
