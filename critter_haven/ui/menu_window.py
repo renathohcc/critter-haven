@@ -5,12 +5,12 @@ dedicada; toda comunicação com o jogo (Pygame, thread principal) passa
 pelo MenuBridge — nunca lemos/escrevemos o estado do jogo diretamente
 aqui.
 
-Álbum, Baú e Upgrades (`critter_haven.ui.album_window.AlbumWindow`,
+Álbum, Baú, Upgrades e Nave (`critter_haven.ui.album_window.AlbumWindow`,
 `critter_haven.ui.chest_window.ChestWindow`,
-`critter_haven.ui.upgrades_window.UpgradesWindow`) fogem do padrão ttk
+`critter_haven.ui.upgrades_window.UpgradesWindow`,
+`critter_haven.ui.nave_window.NaveWindow`) fogem do padrão ttk
 genérico — são pixel art desenhada à mão num Canvas, sem moldura do
-Windows. Nave/Fusão/Config ainda usam ttk (Fase 8.6 vai migrá-los
-também).
+Windows. Fusão/Config ainda usam ttk (Fase 8.6 vai migrá-los também).
 """
 
 from __future__ import annotations
@@ -18,10 +18,10 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from critter_haven.config.planets import PLANETS
 from critter_haven.core.menu_bridge import MenuBridge
 from critter_haven.ui.album_window import AlbumWindow
 from critter_haven.ui.chest_window import ChestWindow
+from critter_haven.ui.nave_window import NaveWindow
 from critter_haven.ui.upgrades_window import UpgradesWindow
 
 POLL_INTERVAL_MS = 200
@@ -105,57 +105,6 @@ class ConfigWindow(MenuToplevel):
         self.pin_button.config(
             text=f"Fixar: {'ON' if snapshot['always_on_top'] else 'OFF'}"
         )
-
-
-class NaveWindow(MenuToplevel):
-    window_name = "nave"
-    title = "Critter Haven — Nave"
-    geometry = "440x420"
-    minsize = (360, 320)
-
-    def _build_widgets(self, parent: tk.Toplevel) -> None:
-        ship_frame = ttk.LabelFrame(parent, text="Destinos")
-        ship_frame.pack(fill="both", expand=True, padx=8, pady=6)
-        self.ship_rows: dict[str, dict[str, tk.Widget]] = {}
-        for planet in PLANETS:
-            row = ttk.Frame(ship_frame)
-            row.pack(fill="x", padx=4, pady=4)
-            info = ttk.Frame(row)
-            info.pack(side="left", fill="x", expand=True)
-            name_label = ttk.Label(
-                info, text=planet.name, anchor="w", justify="left", font=("TkDefaultFont", 10, "bold")
-            )
-            name_label.pack(fill="x")
-            status_label = ttk.Label(
-                info, text="", anchor="w", justify="left", wraplength=300
-            )
-            status_label.pack(fill="x")
-            button = ttk.Button(
-                row,
-                text="Viajar",
-                width=10,
-                command=lambda pid=planet.id: self.bridge.push_command("travel", pid),
-            )
-            button.pack(side="right", anchor="n")
-            if planet.active:
-                button.state(["disabled"])
-            self.ship_rows[planet.id] = {
-                "name_label": name_label,
-                "status_label": status_label,
-                "button": button,
-            }
-
-    def refresh(self, snapshot: dict) -> None:
-        for planet in PLANETS:
-            info = snapshot["planets"][planet.id]
-            widgets = self.ship_rows[planet.id]
-            widgets["status_label"].config(text=info["status"])
-            if planet.active:
-                widgets["button"].state(["disabled"])
-            elif info["can_travel"]:
-                widgets["button"].state(["!disabled"])
-            else:
-                widgets["button"].state(["disabled"])
 
 
 class FusionWindow(MenuToplevel):
