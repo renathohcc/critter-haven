@@ -5,10 +5,12 @@ dedicada; toda comunicação com o jogo (Pygame, thread principal) passa
 pelo MenuBridge — nunca lemos/escrevemos o estado do jogo diretamente
 aqui.
 
-Álbum e Baú (`critter_haven.ui.album_window.AlbumWindow`,
-`critter_haven.ui.chest_window.ChestWindow`) fogem do padrão ttk
+Álbum, Baú e Upgrades (`critter_haven.ui.album_window.AlbumWindow`,
+`critter_haven.ui.chest_window.ChestWindow`,
+`critter_haven.ui.upgrades_window.UpgradesWindow`) fogem do padrão ttk
 genérico — são pixel art desenhada à mão num Canvas, sem moldura do
-Windows. Os demais ainda usam ttk (Fase 8.6 vai migrá-los também).
+Windows. Nave/Fusão/Config ainda usam ttk (Fase 8.6 vai migrá-los
+também).
 """
 
 from __future__ import annotations
@@ -17,10 +19,10 @@ import tkinter as tk
 from tkinter import ttk
 
 from critter_haven.config.planets import PLANETS
-from critter_haven.config.upgrades import UPGRADES
 from critter_haven.core.menu_bridge import MenuBridge
 from critter_haven.ui.album_window import AlbumWindow
 from critter_haven.ui.chest_window import ChestWindow
+from critter_haven.ui.upgrades_window import UpgradesWindow
 
 POLL_INTERVAL_MS = 200
 
@@ -103,46 +105,6 @@ class ConfigWindow(MenuToplevel):
         self.pin_button.config(
             text=f"Fixar: {'ON' if snapshot['always_on_top'] else 'OFF'}"
         )
-
-
-class UpgradesWindow(MenuToplevel):
-    window_name = "upgrades"
-    title = "Critter Haven — Upgrades"
-    geometry = "420x420"
-    minsize = (360, 320)
-
-    def _build_widgets(self, parent: tk.Toplevel) -> None:
-        upgrades_frame = ttk.LabelFrame(parent, text="Upgrades")
-        upgrades_frame.pack(fill="both", expand=True, padx=8, pady=6)
-        self.upgrade_rows: dict[str, dict[str, tk.Widget]] = {}
-        for upgrade in UPGRADES:
-            row = ttk.Frame(upgrades_frame)
-            row.pack(fill="x", padx=4, pady=3)
-            label = ttk.Label(row, text=upgrade.name, anchor="w", justify="left")
-            label.pack(side="left", fill="x", expand=True)
-            button = ttk.Button(
-                row,
-                text="...",
-                width=12,
-                command=lambda uid=upgrade.id: self.bridge.push_command("buy_upgrade", uid),
-            )
-            button.pack(side="right")
-            self.upgrade_rows[upgrade.id] = {"label": label, "button": button}
-
-    def refresh(self, snapshot: dict) -> None:
-        for upgrade in UPGRADES:
-            info = snapshot["upgrades"][upgrade.id]
-            widgets = self.upgrade_rows[upgrade.id]
-            widgets["label"].config(text=f"{upgrade.name} (nv {info['level']}/{upgrade.max_level})")
-            if info["cost"] is None:
-                widgets["button"].config(text="MAX")
-                widgets["button"].state(["disabled"])
-            else:
-                widgets["button"].config(text=f"{info['cost']:.0f} ouro")
-                if info["can_afford"]:
-                    widgets["button"].state(["!disabled"])
-                else:
-                    widgets["button"].state(["disabled"])
 
 
 class NaveWindow(MenuToplevel):
