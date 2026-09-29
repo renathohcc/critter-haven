@@ -324,7 +324,7 @@ class App:
             }
 
         creatures_info = [
-            {"id": id(c), "name": c.species.name, "rarity": c.rarity}
+            {"id": id(c), "species_id": c.species.id, "name": c.species.name, "rarity": c.rarity}
             for c in self.habitat.creatures
         ]
 
