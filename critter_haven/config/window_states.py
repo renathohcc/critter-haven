@@ -18,8 +18,6 @@ EXPANDED = WindowState(name="expanded", width=900, height=420)
 STATES = (COMPACT, MEDIUM, EXPANDED)
 
 DEFAULT_STATE = MEDIUM
-DEFAULT_WIDTH = DEFAULT_STATE.width
-DEFAULT_HEIGHT = DEFAULT_STATE.height
 
 
 def next_state(current: WindowState) -> WindowState:

@@ -7,15 +7,16 @@ from dataclasses import dataclass
 class RarityConfig:
     name: str
     weight: float
-    gold_multiplier: float
 
 
-COMMON = RarityConfig(name="common", weight=85, gold_multiplier=1.0)
-RARE = RarityConfig(name="rare", weight=13, gold_multiplier=2.5)
-SPECIAL = RarityConfig(name="special", weight=2, gold_multiplier=6.0)
+# O multiplicador de ouro por raridade NÃO vive aqui -- já está embutido
+# em `base_gold_per_second` de cada espécie no creatures.json (ver
+# `Creature.gold_per_second`). Só o peso de sorteio importa neste config.
+COMMON = RarityConfig(name="common", weight=85)
+RARE = RarityConfig(name="rare", weight=13)
+SPECIAL = RarityConfig(name="special", weight=2)
 
 RARITIES = (COMMON, RARE, SPECIAL)
-RARITY_BY_NAME = {r.name: r for r in RARITIES}
 
 # Pesos de raridade ao sortear a nova criatura na Fusão (Fase 8 revisão
 # 2): o jogador consome 2 criaturas quaisquer do habitat (de espécies
