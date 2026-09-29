@@ -25,7 +25,7 @@ def test_energy_accumulates_and_spawns_on_max():
 
 def test_creature_at_hits_within_radius():
     habitat = make_habitat()
-    habitat.update(100)  # forca spawn
+    habitat.update(ENERGY_MAX)  # forca spawn
     creature = habitat.creatures[0]
     found = habitat.creature_at(creature.x, creature.y)
     assert found is creature
@@ -33,7 +33,7 @@ def test_creature_at_hits_within_radius():
 
 def test_creature_at_misses_far_away():
     habitat = make_habitat()
-    habitat.update(100)
+    habitat.update(ENERGY_MAX)
     found = habitat.creature_at(-9999, -9999)
     assert found is None
 
@@ -43,11 +43,11 @@ def test_spawn_stops_at_max_creatures_and_holds_energy():
     habitat.max_creatures = 2
 
     for _ in range(2):
-        habitat.update(100)  # cada chamada forca um spawn
+        habitat.update(ENERGY_MAX)  # cada chamada forca um spawn
     assert len(habitat.creatures) == 2
     assert habitat.is_full
 
-    spawned = habitat.update(100)
+    spawned = habitat.update(ENERGY_MAX)
     assert spawned is None
     assert len(habitat.creatures) == 2
     assert habitat.energy == ENERGY_MAX  # energia represada, nao perdida
@@ -56,10 +56,10 @@ def test_spawn_stops_at_max_creatures_and_holds_energy():
 def test_spawn_resumes_after_freeing_space():
     habitat = make_habitat()
     habitat.max_creatures = 1
-    habitat.update(100)
+    habitat.update(ENERGY_MAX)
     assert habitat.is_full
 
-    habitat.update(100)  # segue represando energia
+    habitat.update(ENERGY_MAX)  # segue represando energia
     habitat.creatures.clear()
 
     spawned = habitat.update(0.0)

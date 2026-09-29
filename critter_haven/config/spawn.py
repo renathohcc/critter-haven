@@ -33,8 +33,8 @@ FUSION_RARITY_WEIGHTS: dict[tuple[str, str], dict[str, float]] = {
     ("special", "special"): {"common": 10, "rare": 60, "special": 30},
 }
 
-ENERGY_MAX = 60.0
-ENERGY_PER_SECOND = 1.0  # tempo de spawn = ENERGY_MAX / ENERGY_PER_SECOND (~60s base)
+ENERGY_MAX = 480.0
+ENERGY_PER_SECOND = 1.0  # tempo de spawn = ENERGY_MAX / ENERGY_PER_SECOND (~8min base)
 
 # Capacidade inicial do habitat. Upgrades de capacidade (Fase 4) devem
 # aumentar Habitat.max_creatures em runtime, não este valor base.

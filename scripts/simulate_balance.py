@@ -73,6 +73,11 @@ def run_simulation(hours: float) -> dict:
         if habitat.is_full and "habitat_full" not in milestones:
             milestones["habitat_full"] = second
 
+        if "all_upgrades_maxed" not in milestones and all(
+            upgrades.is_maxed(u) for u in UPGRADES
+        ):
+            milestones["all_upgrades_maxed"] = second
+
         # jogador heurístico: funde as duas primeiras criaturas disponíveis
         # como recurso pra continuar descobrindo espécies novas em vez de
         # deixar o habitat travado
@@ -123,6 +128,7 @@ def report(result: dict) -> None:
         "first_breezel",
         "first_solarva",
         "album_complete",
+        "all_upgrades_maxed",
     ]:
         seconds = result["milestones"].get(key)
         label = format_seconds(seconds) if seconds is not None else "não atingido"

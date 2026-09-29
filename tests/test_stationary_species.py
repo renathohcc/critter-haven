@@ -1,3 +1,4 @@
+from critter_haven.config.spawn import ENERGY_MAX
 from critter_haven.data.species import load_planet
 from critter_haven.entities.habitat import Habitat
 
@@ -9,7 +10,7 @@ def make_habitat() -> Habitat:
 def test_stationary_species_spawns_pinned_at_its_own_position():
     habitat = make_habitat()
     for _ in range(20):
-        habitat.update(100)  # forca varios spawns
+        habitat.update(ENERGY_MAX)  # forca varios spawns
 
     lumibloom = [c for c in habitat.creatures if c.species.id == "lumibloom"]
     for creature in lumibloom:
@@ -18,7 +19,7 @@ def test_stationary_species_spawns_pinned_at_its_own_position():
 
 def test_stationary_creature_never_moves_across_updates():
     habitat = make_habitat()
-    habitat.update(100)
+    habitat.update(ENERGY_MAX)
     lumibloom = next((c for c in habitat.creatures if c.species.id == "lumibloom"), None)
     if lumibloom is None:
         return  # RNG nao sorteou lumibloom nesse spawn, sem problema
@@ -30,7 +31,7 @@ def test_stationary_creature_never_moves_across_updates():
 
 def test_resync_keeps_stationary_creature_pinned_not_resampled():
     habitat = make_habitat()
-    habitat.update(100)
+    habitat.update(ENERGY_MAX)
     lumibloom = next((c for c in habitat.creatures if c.species.id == "lumibloom"), None)
     if lumibloom is None:
         return

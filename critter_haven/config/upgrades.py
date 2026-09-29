@@ -3,7 +3,7 @@ em conversa com o dev — ajustáveis aqui sem tocar no sistema."""
 
 from dataclasses import dataclass
 
-COST_GROWTH = 1.28  # ajustado na Fase 8: 1.15 esgotava todos os upgrades em ~1h de simulação
+COST_GROWTH = 1.75  # ajustado na Fase 9: 1.28 esgotava tudo em ~16min depois da Fusao existir
 
 
 @dataclass(frozen=True)
@@ -29,9 +29,9 @@ GOLD_PRODUCTION = UpgradeDef(
 SPAWN_SPEED = UpgradeDef(
     id="spawn_speed",
     name="Velocidade de Spawn",
-    description="+0.15 energia/s por nível (spawn mais rápido)",
+    description="+0.06 energia/s por nível (spawn mais rápido)",
     base_cost=80,
-    effect_per_level=0.15,
+    effect_per_level=0.06,
     max_level=15,
 )
 
