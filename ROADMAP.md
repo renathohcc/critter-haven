@@ -38,9 +38,27 @@ desenvolvimento e não estavam no plano original.
 
 ## Em aberto
 
-- **Fase 9** — Preparação para expansão (documentar arquitetura, organizar
-  dados, preparar suporte a novos planetas, próximos passos de áudio e
-  distribuição Steam)
+- **Fase 9** — Preparação para expansão: ARCHITECTURE.md, limpeza de
+  config/dados e rebalanceamento do ritmo (Álbum ~1h, upgrades ~3-6h) já
+  feitos; áudio (música + 12 SFX + volumes) e menu inicial feitos.
+  Restam novos planetas (mais a fundo) e planejamento Steam.
+- **Fase 10** — Mini tutorial inicial: Novo Jogo já dá a primeira criatura
+  (Mossnib) e dicas em balões, uma por vez, avançando conforme o jogador
+  age (clicar, vender no Baú, comprar upgrade, barra de energia). Salvo no
+  save, pulável.
+- **Fase 11** — Tower Defense + rogue-lite (libera o próximo planeta ao
+  vencer waves e o chefe, no lugar do item de viagem). Decisões: criaturas
+  lutam sozinhas onde estão; derrota reinicia a defesa sem perder
+  criaturas (só as cartas da tentativa); batalha iniciada por um ícone
+  novo na barra; produção de ouro/itens pausa durante a batalha.
+  Sub-fases: 11.0 fechar design; 11.1 motor de combate em Python puro +
+  simulador headless; 11.2 papéis/habilidades por espécie em dados;
+  11.3 waves/inimigos/chefe de Elyndor; 11.4 modo de batalha no pygame
+  (nave na cena, HUD, janela expandida); 11.5 cartas (3 por wave);
+  11.6 integração com progressão/save/janela da Nave; 11.7 arte;
+  11.8 áudio; 11.9 balanceamento + tutorial de combate.
+- **Fase 12** — Conteúdo de defesa dos demais planetas (monstros, chefe,
+  cartas de Calyra/Aerthos/Glacivar); o motor não muda, só dados.
 
 ## Pendências conhecidas (não inventar, decidir quando chegar a hora)
 
