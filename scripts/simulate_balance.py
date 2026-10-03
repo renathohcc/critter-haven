@@ -37,6 +37,9 @@ def run_simulation(hours: float) -> dict:
     upgrades = UpgradeManager()
     price_map = build_price_map(species_pool)
 
+    # igual ao jogo real: Novo Jogo ja da a primeira criatura (tutorial)
+    album.register(habitat.spawn_species("mossnib"))
+
     total_seconds = int(hours * 3600)
     milestones: dict[str, float] = {}
     upgrade_purchases: list[tuple[float, str, int]] = []

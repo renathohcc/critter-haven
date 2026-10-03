@@ -1,3 +1,4 @@
+from critter_haven.config.economy import ITEM_INTERVAL_BY_RARITY
 from critter_haven.data.species import load_planet
 from critter_haven.economy.chest import Chest
 from critter_haven.economy.pricing import build_price_map, sell_all
@@ -48,12 +49,13 @@ def test_production_adds_gold_over_time():
 
 
 def test_production_drops_item_after_interval():
-    mossnib = get_species("mossnib")  # comum -> intervalo de 8s
+    mossnib = get_species("mossnib")
+    interval = ITEM_INTERVAL_BY_RARITY["common"]
     creature = Creature(species=mossnib, x=0, y=0)
     wallet = Wallet()
     chest = Chest()
 
-    update_production([creature], 7.9, wallet, chest)
+    update_production([creature], interval - 0.1, wallet, chest)
     assert chest.total_count() == 0
 
     update_production([creature], 0.2, wallet, chest)

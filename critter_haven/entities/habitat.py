@@ -59,6 +59,12 @@ class Habitat:
         span = self.max_x - self.min_x
         return self.min_x + span * frac_min, self.min_x + span * frac_max
 
+    def spawn_species(self, species_id: str) -> Species:
+        """Faz nascer uma espécie específica (ex: a criatura de presente
+        do tutorial), sem sorteio e sem gastar energia."""
+        species = next(s for s in self.species_pool if s.id == species_id)
+        return self._place_creature(species)
+
     def _spawn(self) -> Species:
         species = roll_species(self.species_pool)
         return self._place_creature(species)

@@ -1,3 +1,4 @@
+from critter_haven.config.economy import ITEM_INTERVAL_BY_RARITY
 from critter_haven.config.spawn import ENERGY_MAX
 from critter_haven.data.species import load_planet
 from critter_haven.economy.chest import Chest
@@ -42,10 +43,11 @@ def test_gold_gain_scales_with_elapsed_time_within_cap():
     chest = Chest()
     album = Album()
 
+    rate = get_species("mossnib").base_gold_per_second
     result = apply_offline_progress(habitat, wallet, chest, album, 1.0, 100.0, ONE_HOUR)
 
-    assert result["gold_gain"] == 12 * 100.0
-    assert wallet.gold == 12 * 100.0
+    assert result["gold_gain"] == rate * 100.0
+    assert wallet.gold == rate * 100.0
 
 
 def test_gold_gain_respects_multiplier():
@@ -54,9 +56,10 @@ def test_gold_gain_respects_multiplier():
     chest = Chest()
     album = Album()
 
+    rate = get_species("mossnib").base_gold_per_second
     apply_offline_progress(habitat, wallet, chest, album, 2.0, 10.0, ONE_HOUR)
 
-    assert wallet.gold == 12 * 10.0 * 2.0
+    assert wallet.gold == rate * 10.0 * 2.0
 
 
 def test_elapsed_time_is_capped_at_max_offline_seconds():
@@ -87,12 +90,15 @@ def test_elapsed_time_capped_at_four_hours_max_level():
 
 
 def test_items_are_produced_during_offline_time():
-    habitat = make_habitat_with_creature("mossnib")  # comum -> intervalo 8s
+    habitat = make_habitat_with_creature("mossnib")
+    interval = ITEM_INTERVAL_BY_RARITY["common"]
     wallet = Wallet()
     chest = Chest()
     album = Album()
 
-    result = apply_offline_progress(habitat, wallet, chest, album, 1.0, 20.0, ONE_HOUR)
+    result = apply_offline_progress(
+        habitat, wallet, chest, album, 1.0, interval * 2 + 4, ONE_HOUR
+    )
 
     assert result["items_gained"] == {"Folha Viva": 2}
     assert chest.items["Folha Viva"] == 2

@@ -50,10 +50,12 @@ from critter_haven.render.creature_render import (
 from critter_haven.render.fonts import get_font
 from critter_haven.render.tilemap import TileMap, load_map
 from critter_haven.render.start_menu import StartMenu
+from critter_haven.render.tutorial_hint import draw_highlight, draw_hint
 from critter_haven.render.ui_icons import get_button
 from critter_haven.systems.offline_progress import apply_offline_progress
 from critter_haven.systems.production_system import update_production
 from critter_haven.systems.travel_system import can_travel, travel
+from critter_haven.systems.tutorial import Tutorial
 from critter_haven.ui.menu_window import run_menu_window
 
 AUTOSAVE_INTERVAL_SECONDS = 30.0
@@ -127,6 +129,8 @@ class App:
         self._saved_window_state = window_state
         self.mode = "menu"
         self.start_menu = StartMenu(has_save=save_dict is not None)
+        self.tutorial = Tutorial.from_saved(save_dict.get("tutorial") if save_dict else None)
+        self._tutorial_skip_rect = pygame.Rect(0, 0, 0, 0)
         self.window_state = EXPANDED
         self.surface = pygame.display.set_mode(
             (self.window_state.width, self.window_state.height)
@@ -220,6 +224,10 @@ class App:
         if self.mode == "menu":
             self._handle_start_menu_click(pos)
             return
+        if self.tutorial.active and self._tutorial_skip_rect.collidepoint(pos):
+            self.tutorial.skip()
+            audio.play_sfx("ui_click")
+            return
         for name, rect in self.icon_rects.items():
             if rect.collidepoint(pos):
                 self._handle_icon_click(name)
@@ -228,6 +236,7 @@ class App:
         creature = self.habitat.creature_at(pos[0], pos[1])
         if creature:
             audio.play_sfx("click_creature")
+            self.tutorial.on_event("creature_clicked")
             creature.on_click()
             self.selected_creature = creature
         else:
@@ -270,9 +279,14 @@ class App:
             if self.welcome_back_message:
                 self.welcome_back_timer = 8.0
                 audio.play_sfx("welcome_back")
-        self._album_complete_announced = self._album_is_complete()
         self.mode = "playing"
         self._apply_window_state(self._saved_window_state)
+        if self.tutorial.active and not continue_save:
+            # presente do tutorial: a primeira criatura ja nasce pronta
+            gift = self.habitat.spawn_species("mossnib")
+            self.album.register(gift)
+            audio.play_sfx("spawn")
+        self._album_complete_announced = self._album_is_complete()
 
     def _reset_progress(self) -> None:
         self.wallet.gold = 0.0
@@ -285,6 +299,8 @@ class App:
         self._apply_upgrade_effects()
         self.selected_creature = None
         self._loaded_save = None
+        self._saved_window_state = DEFAULT_STATE
+        self.tutorial = Tutorial.new_game()
         SAVE_PATH.unlink(missing_ok=True)
 
     def _apply_window_state(self, state) -> None:
@@ -297,6 +313,8 @@ class App:
             self._sell_all()
             return
         audio.play_sfx("ui_click")
+        if name == "btn_bau":
+            self.tutorial.on_event("chest_opened")
         window_name = dict(ICON_ROW_BUTTONS).get(name)
         if window_name is not None:
             self.menu_bridge.push_to_menu("show_window", window_name)
@@ -311,6 +329,7 @@ class App:
             elif name == "buy_upgrade":
                 if self.upgrades.buy(UPGRADES_BY_ID[payload], self.wallet):
                     audio.play_sfx("buy_upgrade")
+                    self.tutorial.on_event("upgrade_bought")
                 self._apply_upgrade_effects()
             elif name == "travel":
                 destination = next(p for p in PLANETS if p.id == payload)
@@ -321,6 +340,7 @@ class App:
                 item_name, quantity = payload
                 if sell_item(self.chest, self.wallet, self.price_map, item_name, quantity) > 0:
                     audio.play_sfx("sell")
+                    self.tutorial.on_event("sold")
             elif name == "fuse":
                 self._fuse_creatures(*payload)
             elif name == "sfx":
@@ -521,6 +541,7 @@ class App:
             return
         total = sell_all(self.chest, self.wallet, self.price_map)
         audio.play_sfx("sell")
+        self.tutorial.on_event("sold")
         self.last_sale_feedback = f"+{total:.0f} ouro pela venda!"
         self.last_sale_feedback_timer = 2.0
 
@@ -530,6 +551,7 @@ class App:
         if spawned:
             self.album.register(spawned)
             audio.play_sfx("spawn")
+            self.tutorial.on_event("spawned")
             self._check_album_complete()
         # energia cheia so "fica" cheia quando o habitat esta lotado (senao
         # ja nasceu uma criatura): avisa uma vez por enchimento, pro
@@ -546,6 +568,12 @@ class App:
         )
         if items_added:
             audio.play_sfx("item_drop")
+            self.tutorial.on_event("item_dropped")
+        # se o passo "aguarde o item" comecou quando o baú já tinha item,
+        # o evento acima nao vai disparar de novo: confere pelo estado
+        if self.tutorial.step == "wait_item" and self.chest.total_count() > 0:
+            self.tutorial.on_event("item_dropped")
+        self.tutorial.tick(dt)
         if self.last_sale_feedback_timer > 0:
             self.last_sale_feedback_timer = max(0.0, self.last_sale_feedback_timer - dt)
         if self.last_travel_feedback_timer > 0:
@@ -568,6 +596,7 @@ class App:
             self.window_state.name,
             self.always_on_top,
             {"music": audio.get_volumes()[0], "sfx": audio.get_volumes()[1]},
+            self.tutorial.step,
         )
         save_game(save_dict)
 
@@ -598,6 +627,7 @@ class App:
         self._render_hud()
         self._render_icon_row()
         self._render_selection_panel()
+        self._render_tutorial()
         self._render_welcome_back_banner()
         pygame.display.flip()
 
@@ -612,6 +642,34 @@ class App:
         pygame.draw.rect(self.surface, (30, 30, 45), banner, border_radius=6)
         pygame.draw.rect(self.surface, (255, 255, 255), banner, width=1, border_radius=6)
         self.surface.blit(surf, surf.get_rect(center=banner.center))
+
+    def _render_tutorial(self) -> None:
+        if not self.tutorial.active:
+            self._tutorial_skip_rect = pygame.Rect(0, 0, 0, 0)
+            return
+        width, _ = self.surface.get_size()
+        for target in self.tutorial.highlights:
+            if target == "creature":
+                if self.habitat.creatures:
+                    c = self.habitat.creatures[0]
+                    rect = pygame.Rect(0, 0, 80, 80)
+                    rect.center = (int(c.x), int(c.y) - 30)
+                    draw_highlight(self.surface, rect, self.animation_time, round_=True)
+            elif target == "bar":
+                draw_highlight(
+                    self.surface,
+                    pygame.Rect(12, 12, min(200, width - 24), 18),
+                    self.animation_time,
+                )
+            elif target in self.icon_rects:
+                draw_highlight(self.surface, self.icon_rects[target], self.animation_time)
+        self._tutorial_skip_rect = draw_hint(
+            self.surface,
+            self.tutorial.text,
+            (12, 38),
+            min(560, width - 24),
+            "Fechar tutorial" if self.tutorial.step == "energy_info" else "Pular tutorial",
+        )
 
     def _render_energy_bar(self) -> None:
         width, _ = self.surface.get_size()

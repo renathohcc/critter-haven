@@ -24,6 +24,7 @@ def build_save_dict(
     window_state_name: str,
     always_on_top: bool,
     audio_volumes: dict | None = None,
+    tutorial_step: str | None = None,
 ) -> dict:
     return {
         "version": SAVE_VERSION,
@@ -49,6 +50,7 @@ def build_save_dict(
         "window_state": window_state_name,
         "always_on_top": always_on_top,
         "audio": audio_volumes or {},
+        "tutorial": tutorial_step,
     }
 
 

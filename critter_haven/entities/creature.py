@@ -52,7 +52,7 @@ class Creature:
 
     @property
     def gold_per_second(self) -> float:
-        # base_gold_per_second no JSON já é o valor final documentado no GDD
+        # base_gold_per_second no JSON já é o valor final (rebalanceado na Fase 10)
         # (o multiplicador de raridade está embutido nos valores por espécie).
         return self.species.base_gold_per_second
 

@@ -5,7 +5,7 @@
       "name": "Mossnib",
       "planet": "elyndor",
       "rarity": "common",
-      "base_gold_per_second": 12,
+      "base_gold_per_second": 2.4,
       "item_name": "Folha Viva",
       "description": "Eles parecem só musgo... até você perceber que estão te observando de volta."
     },
@@ -14,7 +14,7 @@
       "name": "Pebblit",
       "planet": "elyndor",
       "rarity": "common",
-      "base_gold_per_second": 15,
+      "base_gold_per_second": 3,
       "item_name": "Pedra Polida",
       "description": "Eles guardam pedrinhas como tesouros. Acho que, para eles, são mesmo."
     },
@@ -23,7 +23,7 @@
       "name": "Lumibloom",
       "planet": "elyndor",
       "rarity": "common",
-      "base_gold_per_second": 18,
+      "base_gold_per_second": 3.6,
       "item_name": "Pólen Luminoso",
       "description": "À noite, elas iluminam o caminho... como se soubessem que alguém está olhando."
     },
@@ -32,7 +32,7 @@
       "name": "Breezel",
       "planet": "elyndor",
       "rarity": "rare",
-      "base_gold_per_second": 45,
+      "base_gold_per_second": 9,
       "item_name": "Essência de Vento",
       "description": "Nunca consegui chegar perto de um por muito tempo... talvez eles não gostem de ficar parados."
     },
@@ -41,7 +41,7 @@
       "name": "Solarva",
       "planet": "elyndor",
       "rarity": "special",
-      "base_gold_per_second": 120,
+      "base_gold_per_second": 24,
       "item_name": "Núcleo Solar",
       "description": "Quando um desses aparece... parece que o próprio planeta está respirando mais forte."
     }

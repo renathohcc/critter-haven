@@ -3,7 +3,7 @@ em conversa com o dev — ajustáveis aqui sem tocar no sistema."""
 
 from dataclasses import dataclass
 
-COST_GROWTH = 1.75  # ajustado na Fase 9: 1.28 esgotava tudo em ~16min depois da Fusao existir
+COST_GROWTH = 1.45  # ajustado na Fase 9: 1.28 esgotava tudo em ~16min depois da Fusao existir
 
 
 @dataclass(frozen=True)
@@ -21,7 +21,7 @@ GOLD_PRODUCTION = UpgradeDef(
     id="gold_production",
     name="Produção de Ouro",
     description="+10% de ouro/s em todas as criaturas por nível",
-    base_cost=50,
+    base_cost=200,
     effect_per_level=0.10,
     max_level=20,
 )
@@ -30,7 +30,7 @@ SPAWN_SPEED = UpgradeDef(
     id="spawn_speed",
     name="Velocidade de Spawn",
     description="+0.06 energia/s por nível (spawn mais rápido)",
-    base_cost=80,
+    base_cost=300,
     effect_per_level=0.06,
     max_level=15,
 )
@@ -39,7 +39,7 @@ HABITAT_CAPACITY = UpgradeDef(
     id="habitat_capacity",
     name="Capacidade do Habitat",
     description="+1 criatura simultânea por nível",
-    base_cost=150,
+    base_cost=500,
     effect_per_level=1,
     max_level=10,
 )
@@ -48,7 +48,7 @@ CHEST_CAPACITY = UpgradeDef(
     id="chest_capacity",
     name="Capacidade do Baú",
     description="+25 de espaço de itens por nível",
-    base_cost=100,
+    base_cost=300,
     effect_per_level=25,
     max_level=10,
 )
@@ -60,7 +60,7 @@ OFFLINE_PROGRESS = UpgradeDef(
     id="offline_progress",
     name="Progresso Offline",
     description="Desbloqueia e aumenta o tempo de progresso offline (+1h/nível, máx. 4h)",
-    base_cost=500,
+    base_cost=1500,
     effect_per_level=3600,
     max_level=4,
 )
