@@ -70,9 +70,10 @@ def test_enemies_spawn_at_the_far_end_and_walk_toward_the_ship():
 
 
 def test_tank_taunt_draws_attacks_away_from_the_healer():
-    battle = Battle(make_defense([[("grunt", 3)]]), ["pebblit", "lumibloom"])
+    battle = Battle(make_defense([[("grunt", 1)]], ship_damage=0.0), ["pebblit", "lumibloom"])
     battle.start_next_wave()
     run_until(battle, lambda b: b.phase != "wave", max_steps=3000)
+    assert battle.phase == "won"
     healer = next(u for u in battle.units if u.role == "healer")
     tank = next(u for u in battle.units if u.role == "tank")
     assert healer.hp == healer.max_hp  # tudo foi absorvido pelo tanque
