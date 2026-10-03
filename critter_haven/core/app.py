@@ -18,7 +18,7 @@ from critter_haven.config.upgrades import (
     UPGRADES,
     UPGRADES_BY_ID,
 )
-from critter_haven.config.window_states import DEFAULT_STATE, next_state, state_by_name
+from critter_haven.config.window_states import DEFAULT_STATE, EXPANDED, next_state, state_by_name
 from critter_haven.core import audio, window
 from critter_haven.core.menu_bridge import MenuBridge
 from critter_haven.data.species import all_species_by_id, load_planet, load_planet_safe
@@ -29,8 +29,12 @@ from critter_haven.economy.wallet import Wallet
 from critter_haven.entities.album import Album
 from critter_haven.entities.habitat import Habitat
 from critter_haven.entities.creature import Creature
-from critter_haven.persistence.save_file import load_game, save_game
-from critter_haven.persistence.serializer import build_save_dict, restore_from_save
+from critter_haven.persistence.save_file import SAVE_PATH, load_game, save_game
+from critter_haven.persistence.serializer import (
+    build_save_dict,
+    restore_from_save,
+    seconds_since_saved,
+)
 from critter_haven.render.background import (
     GROUND_BAND_HEIGHT,
     get_background,
@@ -45,6 +49,7 @@ from critter_haven.render.creature_render import (
 )
 from critter_haven.render.fonts import get_font
 from critter_haven.render.tilemap import TileMap, load_map
+from critter_haven.render.start_menu import StartMenu
 from critter_haven.render.ui_icons import get_button
 from critter_haven.systems.offline_progress import apply_offline_progress
 from critter_haven.systems.production_system import update_production
@@ -98,8 +103,9 @@ class App:
         self.welcome_back_message: str | None = None
 
         save_dict = load_game()
+        self._loaded_save = save_dict
         if save_dict is not None:
-            elapsed = restore_from_save(
+            restore_from_save(
                 save_dict,
                 all_species_by_id(),
                 self.wallet,
@@ -113,26 +119,15 @@ class App:
             saved_audio = save_dict.get("audio", {})
             audio.set_music_volume(saved_audio.get("music", audio.DEFAULT_USER_VOLUME))
             audio.set_sfx_volume(saved_audio.get("sfx", audio.DEFAULT_USER_VOLUME))
-            gold_multiplier = 1.0 + self.upgrades.effect_total(GOLD_PRODUCTION)
-            max_offline_seconds = self.upgrades.effect_total(OFFLINE_PROGRESS)
-            offline_result = apply_offline_progress(
-                self.habitat,
-                self.wallet,
-                self.chest,
-                self.album,
-                gold_multiplier,
-                elapsed,
-                max_offline_seconds,
-            )
-            self.welcome_back_message = self._build_welcome_back_message(
-                offline_result, elapsed, max_offline_seconds
-            )
 
         audio.start_habitat_music()
-        if self.welcome_back_message:
-            audio.play_sfx("welcome_back")
 
-        self.window_state = window_state
+        # o menu inicial usa o tamanho "expandido" (cabe logo + botoes);
+        # o tamanho salvo so e aplicado quando o jogador entra no jogo
+        self._saved_window_state = window_state
+        self.mode = "menu"
+        self.start_menu = StartMenu(has_save=save_dict is not None)
+        self.window_state = EXPANDED
         self.surface = pygame.display.set_mode(
             (self.window_state.width, self.window_state.height)
         )
@@ -157,7 +152,7 @@ class App:
         self._album_complete_announced = self._album_is_complete()
         self._energy_full_announced = False
         self.animation_time = 0.0
-        self.welcome_back_timer = 8.0 if self.welcome_back_message else 0.0
+        self.welcome_back_timer = 0.0
         self.autosave_timer = AUTOSAVE_INTERVAL_SECONDS
 
         # Janela de menu (Tkinter) roda em thread própria; toda troca de
@@ -194,7 +189,8 @@ class App:
             self._refresh_focus_state()
             self._handle_events()
             self._process_menu_commands()
-            self._update(dt)
+            if self.mode == "playing":
+                self._update(dt)
             self._publish_menu_snapshot()
             self._render(dt)
 
@@ -221,6 +217,9 @@ class App:
                 self._handle_click(event.pos)
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
+        if self.mode == "menu":
+            self._handle_start_menu_click(pos)
+            return
         for name, rect in self.icon_rects.items():
             if rect.collidepoint(pos):
                 self._handle_icon_click(name)
@@ -234,6 +233,65 @@ class App:
         else:
             self.selected_creature = None
 
+    def _handle_start_menu_click(self, pos: tuple[int, int]) -> None:
+        action = self.start_menu.click(pos)
+        if action is None:
+            return
+        audio.play_sfx("ui_click")
+        if action == "continue":
+            self._begin_play(continue_save=True)
+        elif action == "new":
+            self._reset_progress()
+            self._begin_play(continue_save=False)
+        elif action == "settings":
+            self.menu_bridge.push_to_menu("show_window", "config")
+        elif action == "quit":
+            self.running = False
+
+    def _begin_play(self, continue_save: bool) -> None:
+        """Sai do menu inicial e entra no jogo. O progresso offline so e
+        calculado aqui (nao na abertura do programa) pra o tempo parado no
+        menu nao ser descartado nem contado a mais."""
+        if continue_save and self._loaded_save is not None:
+            elapsed = seconds_since_saved(self._loaded_save)
+            max_offline_seconds = self.upgrades.effect_total(OFFLINE_PROGRESS)
+            offline_result = apply_offline_progress(
+                self.habitat,
+                self.wallet,
+                self.chest,
+                self.album,
+                1.0 + self.upgrades.effect_total(GOLD_PRODUCTION),
+                elapsed,
+                max_offline_seconds,
+            )
+            self.welcome_back_message = self._build_welcome_back_message(
+                offline_result, elapsed, max_offline_seconds
+            )
+            if self.welcome_back_message:
+                self.welcome_back_timer = 8.0
+                audio.play_sfx("welcome_back")
+        self._album_complete_announced = self._album_is_complete()
+        self.mode = "playing"
+        self._apply_window_state(self._saved_window_state)
+
+    def _reset_progress(self) -> None:
+        self.wallet.gold = 0.0
+        self.chest.items.clear()
+        self.chest.capacity = BASE_CHEST_CAPACITY
+        self.habitat.creatures.clear()
+        self.habitat.energy = 0.0
+        self.album.discovered_ids.clear()
+        self.upgrades.levels.clear()
+        self._apply_upgrade_effects()
+        self.selected_creature = None
+        self._loaded_save = None
+        SAVE_PATH.unlink(missing_ok=True)
+
+    def _apply_window_state(self, state) -> None:
+        self.window_state = state
+        self.surface = pygame.display.set_mode((state.width, state.height))
+        self._sync_habitat_bounds()
+
     def _handle_icon_click(self, name: str) -> None:
         if name == "btn_vender_tudo":
             self._sell_all()
@@ -246,7 +304,8 @@ class App:
     def _process_menu_commands(self) -> None:
         for name, payload in self.menu_bridge.drain_commands():
             if name == "cycle_size":
-                self._cycle_window_size()
+                if self.mode == "playing":
+                    self._cycle_window_size()
             elif name == "toggle_pin":
                 self._apply_always_on_top(not self.always_on_top)
             elif name == "buy_upgrade":
@@ -522,6 +581,12 @@ class App:
                 self.surface.blit(background, (0, 0))
             else:
                 self.surface.fill(BACKGROUND_COLOR)
+        if self.mode == "menu":
+            for creature in self.habitat.creatures:
+                draw_creature(self.surface, creature, 0.0)
+            self.start_menu.draw(self.surface, pygame.mouse.get_pos())
+            pygame.display.flip()
+            return
         self._render_energy_bar()
         for creature in self.habitat.creatures:
             draw_creature(self.surface, creature, dt)
@@ -678,7 +743,8 @@ class App:
             self.surface.blit(surf, (panel.x + 8, panel.y + 8 + i * 20))
 
     def quit(self) -> None:
-        self._save_game()
+        if self.mode == "playing":
+            self._save_game()
         self.menu_bridge.stop_event.set()
         self.menu_thread.join(timeout=2.0)
         pygame.quit()
