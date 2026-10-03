@@ -12,6 +12,7 @@ import pygame
 
 from critter_haven.render.fonts import get_font
 from critter_haven.render.spritesheet import load_creature_sheet
+from critter_haven.systems.cards import Card
 from critter_haven.systems.combat_system import FIELD_LENGTH, Battle
 
 SHIP_SCREEN_X = 56
@@ -40,6 +41,7 @@ class BattleView:
         self.speed_index = 0
         self.floaters: list[list] = []  # [x, y, texto, cor, ttl]
         self._buttons: dict[str, pygame.Rect] = {}
+        self.choices: list[Card] = []  # cartas ofertadas (entre as waves)
 
     @property
     def speed(self) -> int:
@@ -162,7 +164,9 @@ class BattleView:
         self._button(surface, "speed", f"Velocidade x{self.speed}", (width - 150, height - 30), mouse_pos)
         self._button(surface, "exit", "Abandonar", (width - 150, height - 66), mouse_pos)
 
-        if battle.phase == "between_waves":
+        if battle.phase == "between_waves" and self.choices:
+            self._draw_cards(surface, mouse_pos)
+        elif battle.phase == "between_waves":
             self._banner(surface, "Wave concluída!", "Próxima wave", "next_wave", mouse_pos)
         elif battle.phase == "won":
             self._banner(surface, "VITÓRIA! A defesa resistiu.", "Voltar ao habitat", "finish", mouse_pos)
@@ -196,6 +200,50 @@ class BattleView:
         font = get_font("consolas", 22, bold=True)
         self._pill(surface, message, (width // 2, height // 2 - 30), font)
         self._button(surface, key, button_text, (width // 2, height // 2 + 20), mouse_pos, size=(240, 40))
+
+    def _draw_cards(self, surface, mouse_pos) -> None:
+        width, height = surface.get_size()
+        self._pill(surface, "Wave concluída! Escolha uma carta", (width // 2, 58), get_font("consolas", 18, bold=True))
+        card_w, card_h, gap = 210, 200, 18
+        total = len(self.choices) * card_w + (len(self.choices) - 1) * gap
+        x = (width - total) // 2
+        top = 90
+        name_font = get_font("consolas", 15, bold=True)
+        body_font = get_font("consolas", 12)
+        tag_font = get_font("consolas", 11, bold=True)
+        for card in self.choices:
+            rect = pygame.Rect(x, top, card_w, card_h)
+            self._buttons[f"card:{card.card_id}"] = rect
+            hovered = rect.collidepoint(mouse_pos)
+            rare = card.rarity == "rare"
+            if hovered:
+                rect = rect.move(0, -6)
+            pygame.draw.rect(surface, (44, 30, 22), rect, border_radius=12)
+            border = (200, 150, 255) if rare else (GOLD if hovered else (157, 130, 98))
+            pygame.draw.rect(surface, border, rect, width=3, border_radius=12)
+            pygame.draw.rect(surface, (9, 2, 2), rect.inflate(6, 6), width=2, border_radius=14)
+            title = name_font.render(card.name, True, GOLD)
+            surface.blit(title, title.get_rect(midtop=(rect.centerx, rect.y + 14)))
+            for i, line in enumerate(self._wrap(card.description, body_font, card_w - 28)):
+                text = body_font.render(line, True, TEXT)
+                surface.blit(text, text.get_rect(midtop=(rect.centerx, rect.y + 58 + i * 18)))
+            tag = tag_font.render("RARA" if rare else "COMUM", True, border)
+            surface.blit(tag, tag.get_rect(midbottom=(rect.centerx, rect.bottom - 10)))
+            x += card_w + gap
+
+    @staticmethod
+    def _wrap(text: str, font, max_width: int) -> list[str]:
+        lines, current = [], ""
+        for word in text.split():
+            candidate = f"{current} {word}".strip()
+            if font.size(candidate)[0] > max_width and current:
+                lines.append(current)
+                current = word
+            else:
+                current = candidate
+        if current:
+            lines.append(current)
+        return lines
 
     def click(self, pos: tuple[int, int]) -> str | None:
         for key, rect in self._buttons.items():

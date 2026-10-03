@@ -21,6 +21,10 @@ class RunModifiers:
     enemy_speed: float = 1.0
     ship_max_hp_bonus: float = 0.0
     ship_damage: float = 1.0
+    aura_multiplier: float = 1.0
+    # multiplicadores por papel ("tank", "attacker"...), somados aos globais
+    role_damage: dict = field(default_factory=dict)
+    role_hp: dict = field(default_factory=dict)
 
 
 @dataclass(eq=False)

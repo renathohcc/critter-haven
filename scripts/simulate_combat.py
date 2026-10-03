@@ -12,6 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from critter_haven.systems.cards import run_battle_with_cards
 from critter_haven.systems.combat_system import run_battle
 
 ARMIES = {
@@ -48,11 +49,21 @@ def main() -> None:
                 ship_left.append(battle.ship.hp / battle.ship.max_hp)
             else:
                 lost_at[battle.wave_index + 1] += 1
+        card_wins = 0
+        card_wave = []
+        for seed in range(seeds):
+            battle, _picked = run_battle_with_cards(planet, army, seed=seed)
+            card_wins += battle.phase == "won"
+            card_wave.append(battle.wave_index + 1)
         avg_ship = sum(ship_left) / len(ship_left) if ship_left else 0.0
         print(
             f"{name}: vitorias {wins}/{seeds} | nave restante (vit.) {avg_ship:.0%} | "
             f"duracao media {sum(durations) / len(durations) / 60:.1f} min | "
             f"caiu na wave: {dict(sorted(lost_at.items()))}"
+        )
+        print(
+            f"    com cartas aleatorias: vitorias {card_wins}/{seeds} | "
+            f"wave media alcancada {sum(card_wave) / len(card_wave):.1f}"
         )
 
 

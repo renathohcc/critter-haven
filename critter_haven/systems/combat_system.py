@@ -84,7 +84,7 @@ class Battle:
             base_x = ROLE_SLOT_X[role]
             for i, species_id in enumerate(ids):
                 stats = self.data.units[species_id]
-                hp = stats.max_hp * self.modifiers.unit_hp
+                hp = stats.max_hp * self.modifiers.unit_hp * self.modifiers.role_hp.get(role, 1.0)
                 units.append(
                     Unit(
                         uid=self._uid(),
@@ -128,6 +128,33 @@ class Battle:
                 unit.hp = unit.max_hp * REVIVE_HP_FRACTION
             unit.cooldown = 0.0
         self.ship.hp = min(self.ship.max_hp, self.ship.hp + self.ship.max_hp * SHIP_HEAL_BETWEEN_WAVES)
+
+    # ----------------------------------------------------------- cartas
+    def refresh_stats(self) -> None:
+        """Reaplica os modificadores da tentativa (chamado quando uma carta
+        muda vida máxima): vida atual acompanha a máxima, proporcional."""
+        for unit in self.units:
+            new_max = (
+                unit.stats.max_hp
+                * self.modifiers.unit_hp
+                * self.modifiers.role_hp.get(unit.role, 1.0)
+            )
+            if new_max != unit.max_hp:
+                ratio = unit.hp / unit.max_hp if unit.max_hp else 1.0
+                unit.max_hp = new_max
+                unit.hp = new_max * ratio if unit.alive else 0.0
+        new_ship_max = self.defense.ship_max_hp + self.modifiers.ship_max_hp_bonus
+        if new_ship_max != self.ship.max_hp:
+            self.ship.hp += new_ship_max - self.ship.max_hp
+            self.ship.max_hp = new_ship_max
+
+    def heal_ship_fraction(self, fraction: float) -> None:
+        self.ship.hp = min(self.ship.max_hp, self.ship.hp + self.ship.max_hp * fraction)
+
+    def heal_units_fraction(self, fraction: float) -> None:
+        for unit in self.units:
+            if unit.alive:
+                unit.hp = min(unit.max_hp, unit.hp + unit.max_hp * fraction)
 
     # --------------------------------------------------------------- passo
     def step(self, dt: float) -> None:
@@ -177,7 +204,7 @@ class Battle:
             if buffer.alive and ability.get("type") == "damage_aura":
                 for other in self.units:
                     if other is not buffer and other.alive and abs(other.x - buffer.x) <= ability["radius"]:
-                        bonus[other.uid] += ability["bonus"]
+                        bonus[other.uid] += ability["bonus"] * self.modifiers.aura_multiplier
         return bonus
 
     # ------------------------------------------------------------ unidades
@@ -196,7 +223,12 @@ class Battle:
             if target is None:
                 unit.cooldown = 0.0
                 continue
-            damage = unit.stats.damage * self.modifiers.unit_damage * (1.0 + aura[unit.uid])
+            damage = (
+                unit.stats.damage
+                * self.modifiers.unit_damage
+                * self.modifiers.role_damage.get(unit.role, 1.0)
+                * (1.0 + aura[unit.uid])
+            )
             self._hit_enemy(unit, target, damage)
             unit.attacks_made += 1
             unit.cooldown += unit.stats.attack_interval / self.modifiers.unit_attack_speed

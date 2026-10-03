@@ -1,0 +1,30 @@
+{
+  "cards": [
+    {"id": "garras_afiadas", "name": "Garras Afiadas", "description": "+15% de dano de todas as criaturas", "rarity": "common",
+     "effects": [{"type": "mod", "field": "unit_damage", "mult": 1.15}]},
+    {"id": "casca_dura", "name": "Casca Dura", "description": "+20% de vida de todas as criaturas", "rarity": "common",
+     "effects": [{"type": "mod", "field": "unit_hp", "mult": 1.2}]},
+    {"id": "ritmo_acelerado", "name": "Ritmo Acelerado", "description": "+15% de velocidade de ataque", "rarity": "common",
+     "effects": [{"type": "mod", "field": "unit_attack_speed", "mult": 1.15}]},
+    {"id": "polen_revigorante", "name": "Pólen Revigorante", "description": "+30% de cura", "rarity": "common",
+     "effects": [{"type": "mod", "field": "heal", "mult": 1.3}]},
+    {"id": "vento_contrario", "name": "Vento Contrário", "description": "Inimigos 12% mais lentos", "rarity": "common",
+     "effects": [{"type": "mod", "field": "enemy_speed", "mult": 0.88}]},
+    {"id": "reforco_do_casco", "name": "Reforço do Casco", "description": "Nave com +100 de vida máxima (e recupera 100)", "rarity": "common",
+     "effects": [{"type": "ship_hp_bonus", "amount": 100}]},
+    {"id": "reparos_de_emergencia", "name": "Reparos de Emergência", "description": "Recupera 40% da vida da nave agora", "rarity": "common",
+     "effects": [{"type": "heal_ship", "fraction": 0.4}]},
+    {"id": "segundo_folego", "name": "Segundo Fôlego", "description": "Cura 50% da vida de todas as criaturas agora", "rarity": "common",
+     "effects": [{"type": "heal_units", "fraction": 0.5}]},
+    {"id": "muralha_viva", "name": "Muralha Viva", "description": "+40% de vida dos tanques", "rarity": "common",
+     "effects": [{"type": "role_mod", "field": "role_hp", "role": "tank", "mult": 1.4}]},
+    {"id": "furia_alada", "name": "Fúria Alada", "description": "+25% de dano dos atacantes", "rarity": "rare",
+     "effects": [{"type": "role_mod", "field": "role_damage", "role": "attacker", "mult": 1.25}]},
+    {"id": "aura_expandida", "name": "Aura Expandida", "description": "Aura dos buffers 50% mais forte", "rarity": "rare",
+     "effects": [{"type": "mod", "field": "aura_multiplier", "mult": 1.5}]},
+    {"id": "canhao_solar", "name": "Canhão Solar", "description": "+60% de dano da nave", "rarity": "rare",
+     "effects": [{"type": "mod", "field": "ship_damage", "mult": 1.6}]},
+    {"id": "fortaleza", "name": "Fortaleza", "description": "+30% de vida e +10% de dano de todas as criaturas", "rarity": "rare",
+     "effects": [{"type": "mod", "field": "unit_hp", "mult": 1.3}, {"type": "mod", "field": "unit_damage", "mult": 1.1}]}
+  ]
+}

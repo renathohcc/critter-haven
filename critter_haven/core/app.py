@@ -57,6 +57,7 @@ from critter_haven.render.ui_icons import get_button
 from critter_haven.systems.offline_progress import apply_offline_progress
 from critter_haven.systems.production_system import update_production
 from critter_haven.systems.travel_system import can_travel, travel
+from critter_haven.systems.cards import apply_card, card_by_id, draw_choices
 from critter_haven.systems.combat_system import Battle
 from critter_haven.systems.tutorial import Tutorial
 from critter_haven.ui.menu_window import run_menu_window
@@ -139,6 +140,7 @@ class App:
         self.battle_view = BattleView()
         self._battle_accumulator = 0.0
         self._pre_battle_window_state = None
+        self._cards_picked: list[str] = []
         self.window_state = EXPANDED
         self.surface = pygame.display.set_mode(
             (self.window_state.width, self.window_state.height)
@@ -277,6 +279,8 @@ class App:
         self.battle = Battle(defense, army)
         self.battle_view = BattleView()
         self._battle_accumulator = 0.0
+        self._cards_picked = []
+        self._cards_offered_wave = -1
         self.selected_creature = None
         self.mode = "battle"
 
@@ -295,13 +299,25 @@ class App:
         while self._battle_accumulator >= step:
             self._battle_accumulator -= step
             self.battle.step(step)
+        # fim de wave (e nao e a ultima): oferece 3 cartas, uma por wave
+        if self.battle.phase == "between_waves" and not self.battle_view.choices:
+            if getattr(self, "_cards_offered_wave", -1) != self.battle.wave_index:
+                self._cards_offered_wave = self.battle.wave_index
+                self.battle_view.choices = draw_choices(self.battle.rng, self._cards_picked)
 
     def _handle_battle_click(self, pos: tuple[int, int]) -> None:
         action = self.battle_view.click(pos)
         if action is None or self.battle is None:
             return
-        audio.play_sfx("ui_click")
-        if action == "next_wave":
+        if not action.startswith("card:"):
+            audio.play_sfx("ui_click")
+        if action.startswith("card:"):
+            card = card_by_id(action.split(":", 1)[1])
+            apply_card(self.battle, card)
+            self._cards_picked.append(card.card_id)
+            self.battle_view.choices = []
+            audio.play_sfx("buy_upgrade")
+        elif action == "next_wave":
             self.battle.start_next_wave()
         elif action in ("exit", "finish"):
             self._end_battle()
