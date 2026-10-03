@@ -1,24 +1,18 @@
-"""Verificação de requisitos de viagem entre planetas (GDD seção 7)."""
+"""Verificação de liberação de planetas (Fase 11): um destino abre quando a
+defesa do planeta anterior da cadeia foi vencida."""
 
 from __future__ import annotations
 
+from collections.abc import Collection
+
 from critter_haven.config.planets import PlanetDestination
-from critter_haven.economy.chest import Chest
 
 
-def can_travel(destination: PlanetDestination, chest: Chest) -> bool:
+def can_travel(destination: PlanetDestination, cleared_defenses: Collection[str]) -> bool:
     if destination.active:
         return True
-    if destination.requirement_pending or destination.required_item is None:
-        return False
-    return chest.items.get(destination.required_item, 0) >= destination.required_quantity
+    return destination.unlock_after is not None and destination.unlock_after in cleared_defenses
 
 
-def travel(destination: PlanetDestination, chest: Chest) -> bool:
-    if not can_travel(destination, chest):
-        return False
-    if destination.required_item:
-        chest.items[destination.required_item] -= destination.required_quantity
-        if chest.items[destination.required_item] <= 0:
-            del chest.items[destination.required_item]
-    return True
+def travel(destination: PlanetDestination, cleared_defenses: Collection[str]) -> bool:
+    return can_travel(destination, cleared_defenses)

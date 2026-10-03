@@ -7,7 +7,7 @@ import threading
 import pygame
 
 from critter_haven.config.economy import BASE_CHEST_CAPACITY
-from critter_haven.config.planets import PLANETS
+from critter_haven.config.planets import PLANETS, PLANETS_BY_ID
 from critter_haven.config.spawn import BASE_MAX_CREATURES, ENERGY_PER_SECOND
 from critter_haven.config.upgrades import (
     CHEST_CAPACITY,
@@ -136,6 +136,8 @@ class App:
         self.start_menu = StartMenu(has_save=save_dict is not None)
         self.tutorial = Tutorial.from_saved(save_dict.get("tutorial") if save_dict else None)
         self._tutorial_skip_rect = pygame.Rect(0, 0, 0, 0)
+        saved_cleared = save_dict.get("defenses_cleared", []) if save_dict else []
+        self.cleared_defenses: set[str] = set(saved_cleared)
         self.battle: Battle | None = None
         self.battle_view = BattleView()
         self._battle_accumulator = 0.0
@@ -299,11 +301,26 @@ class App:
         while self._battle_accumulator >= step:
             self._battle_accumulator -= step
             self.battle.step(step)
+        if self.battle.phase == "won" and self.habitat.planet not in self.cleared_defenses:
+            self._register_defense_cleared()
         # fim de wave (e nao e a ultima): oferece 3 cartas, uma por wave
         if self.battle.phase == "between_waves" and not self.battle_view.choices:
             if getattr(self, "_cards_offered_wave", -1) != self.battle.wave_index:
                 self._cards_offered_wave = self.battle.wave_index
                 self.battle_view.choices = draw_choices(self.battle.rng, self._cards_picked)
+
+    def _register_defense_cleared(self) -> None:
+        """Vencer a defesa libera o proximo planeta da cadeia (e e salvo
+        na hora: abandonar a tela de vitoria nao perde o progresso)."""
+        planet = self.habitat.planet
+        self.cleared_defenses.add(planet)
+        audio.play_sfx("album_complete")
+        unlocked = next((p for p in PLANETS if p.unlock_after == planet), None)
+        self.last_sale_feedback = (
+            f"Defesa concluída! {unlocked.name} liberado." if unlocked else "Defesa concluída!"
+        )
+        self.last_sale_feedback_timer = 6.0
+        self._save_game()
 
     def _handle_battle_click(self, pos: tuple[int, int]) -> None:
         action = self.battle_view.click(pos)
@@ -381,6 +398,7 @@ class App:
         self._loaded_save = None
         self._saved_window_state = DEFAULT_STATE
         self.tutorial = Tutorial.new_game()
+        self.cleared_defenses = set()
         SAVE_PATH.unlink(missing_ok=True)
 
     def _apply_window_state(self, state) -> None:
@@ -477,16 +495,14 @@ class App:
         for planet in PLANETS:
             if planet.active:
                 status = "Atual"
-            elif planet.requirement_pending:
-                status = "Bloqueado (requisito a definir)"
-            elif can_travel(planet, self.chest):
-                status = "Requisito atendido!"
+            elif can_travel(planet, self.cleared_defenses):
+                status = "Defesa vencida - liberado!"
             else:
-                have = self.chest.items.get(planet.required_item, 0)
-                status = f"Precisa: {planet.required_item} ({have}/{planet.required_quantity})"
+                previous = PLANETS_BY_ID[planet.unlock_after].name
+                status = f"Vença a defesa de {previous}"
             planets_info[planet.id] = {
                 "status": status,
-                "can_travel": can_travel(planet, self.chest),
+                "can_travel": can_travel(planet, self.cleared_defenses),
             }
 
         album_info = {}
@@ -559,18 +575,13 @@ class App:
     def _attempt_travel(self, destination) -> None:
         if destination.active:
             return
-        if travel(destination, self.chest):
+        if travel(destination, self.cleared_defenses):
             audio.play_sfx("travel")
             self.last_travel_feedback = f"Homie viajou para {destination.name}!"
-        elif destination.requirement_pending:
-            audio.play_sfx("denied")
-            self.last_travel_feedback = "Requisito de viagem ainda não definido."
         else:
             audio.play_sfx("denied")
-            self.last_travel_feedback = (
-                f"Faltam itens: {destination.required_item} "
-                f"x{destination.required_quantity}"
-            )
+            previous = PLANETS_BY_ID[destination.unlock_after].name
+            self.last_travel_feedback = f"Vença a defesa de {previous} primeiro."
         self.last_travel_feedback_timer = 3.0
 
     def _apply_upgrade_effects(self) -> None:
@@ -680,6 +691,7 @@ class App:
             self.always_on_top,
             {"music": audio.get_volumes()[0], "sfx": audio.get_volumes()[1]},
             self.tutorial.step,
+            sorted(self.cleared_defenses),
         )
         save_game(save_dict)
 

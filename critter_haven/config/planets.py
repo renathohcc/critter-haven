@@ -1,6 +1,6 @@
-"""Destinos da nave (GDD seção 6/7). Aerthos e Glacivar têm requisito
-'a definir' no próprio GDD — usamos placeholder configurável em vez de
-inventar um valor definitivo (decisão registrada com o dev)."""
+"""Destinos da nave. Fase 11: um planeta é liberado quando o jogador vence
+a defesa (todas as waves + chefe) do planeta anterior da cadeia -- não há
+mais item de viagem."""
 
 from dataclasses import dataclass
 
@@ -11,9 +11,7 @@ class PlanetDestination:
     name: str
     theme: str
     active: bool
-    required_item: str | None = None
-    required_quantity: int = 0
-    requirement_pending: bool = False
+    unlock_after: str | None = None  # id do planeta cuja defesa precisa ser vencida
 
 
 PLANETS = (
@@ -28,21 +26,21 @@ PLANETS = (
         name="Calyra",
         theme="Deserto árido",
         active=False,
-        required_item="Núcleo Solar",
-        required_quantity=1,
+        unlock_after="elyndor",
     ),
     PlanetDestination(
         id="aerthos",
         name="Aerthos",
         theme="Planeta de nuvens",
         active=False,
-        requirement_pending=True,
+        unlock_after="calyra",
     ),
     PlanetDestination(
         id="glacivar",
         name="Glacivar",
         theme="Gelo e vulcões",
         active=False,
-        requirement_pending=True,
+        unlock_after="aerthos",
     ),
 )
+PLANETS_BY_ID = {p.id: p for p in PLANETS}

@@ -51,6 +51,9 @@ desenvolvimento e não estavam no plano original.
   lutam sozinhas onde estão; derrota reinicia a defesa sem perder
   criaturas (só as cartas da tentativa); batalha iniciada por um ícone
   novo na barra; produção de ouro/itens pausa durante a batalha.
+  Estado: 11.1 a 11.6 implementadas (motor, papéis, waves de Elyndor, modo
+  de batalha com placeholders, 13 cartas, planeta libera ao vencer a defesa);
+  faltam 11.7 arte, 11.8 áudio e 11.9 balanceamento final + tutorial de combate.
   Sub-fases: 11.0 fechar design; 11.1 motor de combate em Python puro +
   simulador headless; 11.2 papéis/habilidades por espécie em dados;
   11.3 waves/inimigos/chefe de Elyndor; 11.4 modo de batalha no pygame

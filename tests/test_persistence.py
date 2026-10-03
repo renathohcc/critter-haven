@@ -83,3 +83,13 @@ def test_load_file_without_version_key_returns_none(tmp_path):
     path = tmp_path / "save.json"
     path.write_text('{"gold": 10}', encoding="utf-8")
     assert load_game(path) is None
+
+
+def test_save_dict_keeps_cleared_defenses_and_tutorial_step():
+    species_pool, habitat, wallet, chest, album, upgrades = make_state()
+    save_dict = build_save_dict(
+        wallet, chest, habitat, album, upgrades, "medium", True,
+        tutorial_step="sell", defenses_cleared=["elyndor"],
+    )
+    assert save_dict["defenses_cleared"] == ["elyndor"]
+    assert save_dict["tutorial"] == "sell"
