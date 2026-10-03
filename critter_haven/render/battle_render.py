@@ -42,6 +42,7 @@ class BattleView:
         self.floaters: list[list] = []  # [x, y, texto, cor, ttl]
         self._buttons: dict[str, pygame.Rect] = {}
         self.choices: list[Card] = []  # cartas ofertadas (entre as waves)
+        self._flipped_cache: dict[tuple[str, int], pygame.Surface] = {}
 
     @property
     def speed(self) -> int:
@@ -107,8 +108,13 @@ class BattleView:
         if sheet is not None:
             frames = sheet.state_frames("idle")
             fps = sheet.state_fps("idle")
-            frame = frames[int(anim_time * fps) % len(frames)]
-            image = frame.copy()
+            index = int(anim_time * fps) % len(frames)
+            # os sprites olham pra esquerda; na batalha as criaturas encaram
+            # a direita, de onde vem os inimigos
+            key = (unit.stats.species_id, index)
+            if key not in self._flipped_cache:
+                self._flipped_cache[key] = pygame.transform.flip(frames[index], True, False)
+            image = self._flipped_cache[key].copy()
             image.set_alpha(alpha)
             rect = image.get_rect(midbottom=(int(sx), int(ground_y + sheet.ground_offset)))
             surface.blit(image, rect)
