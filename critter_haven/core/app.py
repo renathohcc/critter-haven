@@ -144,6 +144,7 @@ class App:
         self._pre_battle_window_state = None
         self._cards_picked: list[str] = []
         self._defeat_announced = False
+        self._battle_events: list = []
         self.window_state = EXPANDED
         self.surface = pygame.display.set_mode(
             (self.window_state.width, self.window_state.height)
@@ -286,6 +287,7 @@ class App:
         self._cards_picked = []
         self._cards_offered_wave = -1
         self._defeat_announced = False
+        self._battle_events = []
         self.selected_creature = None
         self.mode = "battle"
 
@@ -305,6 +307,7 @@ class App:
         while self._battle_accumulator >= step:
             self._battle_accumulator -= step
             self.battle.step(step)
+            self._battle_events.extend(self.battle.events)
             self._play_battle_sounds()
         if self.battle.phase == "lost" and not self._defeat_announced:
             self._defeat_announced = True
@@ -739,8 +742,9 @@ class App:
         if self.mode == "battle" and self.battle is not None:
             self.battle_view.draw(
                 self.surface, self.battle, self.animation_time,
-                self.habitat.spawn_y, pygame.mouse.get_pos(),
+                self.habitat.spawn_y, pygame.mouse.get_pos(), self._battle_events,
             )
+            self._battle_events = []
             pygame.display.flip()
             return
         if self.mode == "menu":

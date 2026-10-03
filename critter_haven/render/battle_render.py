@@ -11,7 +11,7 @@ from __future__ import annotations
 import pygame
 
 from critter_haven.render.fonts import get_font
-from critter_haven.render.spritesheet import load_creature_sheet
+from critter_haven.render.spritesheet import load_creature_sheet, load_enemy_sheet
 from critter_haven.systems.cards import Card
 from critter_haven.systems.combat_system import FIELD_LENGTH, Battle
 
@@ -34,6 +34,8 @@ ENEMY_LOOK = {
 }
 
 SPEEDS = (1, 2, 4)
+ATTACK_ANIM_SECONDS = 0.8
+WALK_GRACE_SECONDS = 0.12
 
 
 class BattleView:
@@ -43,6 +45,13 @@ class BattleView:
         self._buttons: dict[str, pygame.Rect] = {}
         self.choices: list[Card] = []  # cartas ofertadas (entre as waves)
         self._flipped_cache: dict[tuple[str, int], pygame.Surface] = {}
+        # estado de animacao dos inimigos com arte (por uid)
+        self._enemy_last: dict[int, tuple[float, str]] = {}  # uid -> (sx, tipo)
+        self._enemy_prev_x: dict[int, float] = {}
+        self._attack_until: dict[int, float] = {}
+        self._moved_at: dict[int, float] = {}
+        self._dying: list[list] = []  # [sx, tipo, inicio]
+        self._now = 0.0
 
     @property
     def speed(self) -> int:
@@ -62,9 +71,13 @@ class BattleView:
         anim_time: float,
         ground_y: float,
         mouse_pos: tuple[int, int],
+        events: list | None = None,
     ) -> None:
         width, height = surface.get_size()
         positions: dict[int, tuple[float, float]] = {}
+        events = battle.events if events is None else events
+        self._now = anim_time
+        self._consume_enemy_events(events, {u.uid for u in battle.units}, anim_time)
 
         self._draw_ship(surface, battle, ground_y)
         for unit in battle.units:
@@ -77,8 +90,9 @@ class BattleView:
             positions[enemy.uid] = (sx, ground_y - size[1])
             self._draw_enemy(surface, enemy, sx, ground_y, colour, size)
         positions[0] = (SHIP_SCREEN_X, ground_y - 40)
+        self._draw_dying(surface, ground_y, anim_time)
 
-        self._collect_floaters(battle, positions)
+        self._collect_floaters(events, positions)
         self._draw_floaters(surface)
         self._draw_hud(surface, battle, mouse_pos)
 
@@ -125,7 +139,41 @@ class BattleView:
         if unit.alive:
             self._bar(surface, sx, top, 30, unit.hp / unit.max_hp, HP_UNIT)
 
+    def _consume_enemy_events(self, events, unit_ids: set[int], now: float) -> None:
+        for event in events:
+            if event.kind == "hit" and event.source not in unit_ids and event.source != 0:
+                self._attack_until[event.source] = now + ATTACK_ANIM_SECONDS
+            elif event.kind == "death" and event.target in self._enemy_last:
+                sx, kind = self._enemy_last.pop(event.target)
+                self._enemy_prev_x.pop(event.target, None)
+                self._attack_until.pop(event.target, None)
+                if load_enemy_sheet(kind) is not None:
+                    self._dying.append([sx, kind, now])
+
+    def _draw_sheet_frame(self, surface, sheet, state: str, elapsed: float, sx, ground_y, loop=True):
+        frames = sheet.state_frames(state)
+        index = int(elapsed * sheet.state_fps(state))
+        index = index % len(frames) if loop else min(index, len(frames) - 1)
+        rect = frames[index].get_rect(midbottom=(int(sx), int(ground_y + sheet.ground_offset)))
+        surface.blit(frames[index], rect)
+        return rect
+
+    def _draw_dying(self, surface, ground_y: float, now: float) -> None:
+        remaining = []
+        for entry in self._dying:
+            sx, kind, start = entry
+            sheet = load_enemy_sheet(kind)
+            length = len(sheet.state_frames("death")) / sheet.state_fps("death")
+            if now - start <= length + 0.4:
+                self._draw_sheet_frame(surface, sheet, "death", now - start, sx, ground_y, loop=False)
+                remaining.append(entry)
+        self._dying = remaining
+
     def _draw_enemy(self, surface, enemy, sx: float, ground_y: float, colour, size) -> None:
+        sheet = load_enemy_sheet(enemy.stats.enemy_id)
+        if sheet is not None:
+            self._draw_enemy_sprite(surface, enemy, sheet, sx, ground_y)
+            return
         rect = pygame.Rect(0, 0, *size)
         rect.midbottom = (int(sx), int(ground_y))
         pygame.draw.rect(surface, colour, rect, border_radius=6)
@@ -136,9 +184,26 @@ class BattleView:
         if enemy.hp < enemy.max_hp or enemy.stats.boss:
             self._bar(surface, sx, rect.top - 3, max(24, size[0]), enemy.hp / enemy.max_hp, HP_ENEMY)
 
+    def _draw_enemy_sprite(self, surface, enemy, sheet, sx: float, ground_y: float) -> None:
+        now = self._now
+        uid = enemy.uid
+        self._enemy_last[uid] = (sx, enemy.stats.enemy_id)
+        if abs(sx - self._enemy_prev_x.get(uid, sx)) > 0.01:
+            self._moved_at[uid] = now
+        self._enemy_prev_x[uid] = sx
+        # no 1x há frames sem passo de simulação: segura o "andando" um instante
+        moved = now - self._moved_at.get(uid, -1.0) < WALK_GRACE_SECONDS
+        if now < self._attack_until.get(uid, 0.0):
+            state, elapsed = "attack", ATTACK_ANIM_SECONDS - (self._attack_until[uid] - now)
+        else:
+            state, elapsed = "walk", (now if moved else 0.0)
+        rect = self._draw_sheet_frame(surface, sheet, state, elapsed, sx, ground_y)
+        if enemy.hp < enemy.max_hp or enemy.stats.boss:
+            self._bar(surface, sx, rect.top + 10, 34, enemy.hp / enemy.max_hp, HP_ENEMY)
+
     # ---------------------------------------------------- numeros flutuantes
-    def _collect_floaters(self, battle: Battle, positions) -> None:
-        for event in battle.events:
+    def _collect_floaters(self, events, positions) -> None:
+        for event in events:
             if event.kind not in ("hit", "heal") or event.target not in positions:
                 continue
             x, y = positions[event.target]

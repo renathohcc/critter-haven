@@ -37,7 +37,11 @@ def _pad_to(frame: Image.Image, target_w: int, target_h: int) -> Image.Image:
     return canvas
 
 
-def assemble(species_id: str, animations: dict[str, tuple[Path, bool]]) -> None:
+def assemble(
+    species_id: str,
+    animations: dict[str, tuple[Path, bool]],
+    out_dir: Path = OUT_DIR,
+) -> None:
     raw: dict[str, list[Image.Image]] = {
         state: gif_frames(gif_path) for state, (gif_path, _loop) in animations.items()
     }
@@ -61,9 +65,9 @@ def assemble(species_id: str, animations: dict[str, tuple[Path, bool]]) -> None:
     for i, frame in enumerate(all_frames):
         sheet.paste(frame, (i * frame_w, 0))
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    sheet.save(OUT_DIR / f"{species_id}.png")
-    (OUT_DIR / f"{species_id}.json").write_text(
+    out_dir.mkdir(parents=True, exist_ok=True)
+    sheet.save(out_dir / f"{species_id}.png")
+    (out_dir / f"{species_id}.json").write_text(
         json.dumps({"frame_size": [frame_w, frame_h], "states": states}, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )

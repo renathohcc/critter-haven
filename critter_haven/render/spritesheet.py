@@ -70,6 +70,19 @@ class SpriteSheet:
 
 
 _sheet_cache: dict[str, SpriteSheet | None] = {}
+_enemy_sheet_cache: dict[str, SpriteSheet | None] = {}
+
+
+def load_enemy_sheet(enemy_id: str) -> SpriteSheet | None:
+    """Spritesheet de um inimigo (assets/creatures/enemies/). None enquanto
+    o inimigo ainda nao tem arte -- a batalha usa o placeholder."""
+    if enemy_id not in _enemy_sheet_cache:
+        folder = ASSETS_CREATURES_DIR / "enemies"
+        image_path, meta_path = folder / f"{enemy_id}.png", folder / f"{enemy_id}.json"
+        _enemy_sheet_cache[enemy_id] = (
+            SpriteSheet(image_path, meta_path) if image_path.exists() and meta_path.exists() else None
+        )
+    return _enemy_sheet_cache[enemy_id]
 
 
 def load_creature_sheet(species_id: str) -> SpriteSheet | None:
