@@ -141,12 +141,14 @@ class AlbumWindow:
         self.top.geometry(f"+{event.x_root - ox}+{event.y_root - oy}")
 
     def _on_close(self) -> None:
+        self.bridge.play_sfx("ui_click")
         self.bridge.hide_window(self.window_name)
         self.top.withdraw()
 
     def _select_chapter(self, index: int) -> None:
         if index == self.chapter_index:
             return
+        self.bridge.play_sfx("ui_click")
         self.chapter_index = index
         self.page_index = 0
         self._build_page_content()
@@ -158,6 +160,7 @@ class AlbumWindow:
         count = len(species_pool)
         if count == 0:
             return
+        self.bridge.play_sfx("ui_click")
         self.page_index = (self.page_index + delta) % count
         self._build_page_content()
 

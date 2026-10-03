@@ -160,6 +160,7 @@ class UpgradesWindow:
 
     def _buy(self, upgrade_id: str) -> None:
         if not self._row_items[upgrade_id]["can_buy"]:
+            self.bridge.play_sfx("denied")
             return
         self.bridge.push_command("buy_upgrade", upgrade_id)
 
@@ -171,6 +172,7 @@ class UpgradesWindow:
         self.top.geometry(f"+{event.x_root - ox}+{event.y_root - oy}")
 
     def _on_close(self) -> None:
+        self.bridge.play_sfx("ui_click")
         self.bridge.hide_window(self.window_name)
         self.top.withdraw()
 

@@ -1,7 +1,7 @@
 """Janela de Configurações: painel metálico (Tkinter Canvas, sem
 moldura do Windows, mesma técnica das outras) com parafusos nos cantos
 — combina com o ícone de engrenagem. Reúne Tamanho/Fixar (antes vivam
-dentro do Baú) e já reserva espaço pra futuras opções de áudio/música.
+dentro do Baú) e os volumes de música/efeitos (sliders independentes).
 """
 
 from __future__ import annotations
@@ -24,13 +24,20 @@ CAPTION_COLOR = "#78787f"
 LABEL_DIM = "#6e6e75"
 
 ROW_Y_START = 66
-ROW_PITCH = 96
+ROW_PITCH = 90
 
 SWITCH_ON_COLOR = "#78be78"
 SWITCH_OFF_COLOR = "#46464c"
 SWITCH_KNOB = "#f5f5eb"
 SWITCH_OUTLINE = "#0a0505"
 SWITCH_W, SWITCH_H = 70, 34
+
+ROW_FILL = "#3b3634"
+SLIDER_TRACK = "#1e1c22"
+SLIDER_FILL = "#d9a53a"
+SLIDER_KNOB = "#f4d693"
+SLIDER_H = 10
+SLIDER_HIT_H = 28
 
 
 class SettingsWindow:
@@ -125,8 +132,8 @@ class SettingsWindow:
             size_btn_x + buy_btn.width() // 2, size_btn_y + buy_btn.height() // 2,
             text="-", font=("Consolas", 12, "bold"), fill=GOLD,
         )
-        c.tag_bind(size_btn_item, "<Button-1>", lambda _e: self.bridge.push_command("cycle_size"))
-        c.tag_bind(self.size_text_item, "<Button-1>", lambda _e: self.bridge.push_command("cycle_size"))
+        c.tag_bind(size_btn_item, "<Button-1>", lambda _e: self._click("cycle_size"))
+        c.tag_bind(self.size_text_item, "<Button-1>", lambda _e: self._click("cycle_size"))
 
         # linha 2: fixar sempre no topo (switch)
         row_y += ROW_PITCH
@@ -157,19 +164,80 @@ class SettingsWindow:
         )
         self._switch_geom = (sw_x, sw_y, knob_r)
         for item in (self.switch_track, self.switch_knob):
-            c.tag_bind(item, "<Button-1>", lambda _e: self.bridge.push_command("toggle_pin"))
+            c.tag_bind(item, "<Button-1>", lambda _e: self._click("toggle_pin"))
 
-        # linha 3: audio (em breve, sem controle nenhum)
-        row_y += ROW_PITCH
-        c.create_image(row_x, row_y, image=row_bg, anchor="nw")
-        c.create_text(
-            text_x, row_y + 14, text="Áudio e música", anchor="nw",
-            font=("Consolas", 14, "bold"), fill=LABEL_DIM,
+        # linhas 3 e 4: volumes (musica e efeitos, independentes)
+        self.sliders: dict[str, dict] = {}
+        for key, label in (("music", "Volume da música"), ("sfx", "Volume dos efeitos")):
+            row_y += ROW_PITCH
+            c.create_image(row_x, row_y, image=row_bg, anchor="nw")
+            c.create_text(
+                text_x, row_y + 12, text=label, anchor="nw",
+                font=("Consolas", 14, "bold"), fill=LABEL_COLOR,
+            )
+            percent_item = c.create_text(
+                row_x + row_bg.width() - 18, row_y + 14, text="50%", anchor="ne",
+                font=("Consolas", 13, "bold"), fill=GOLD,
+            )
+            self._build_slider(key, text_x, row_x + row_bg.width() - 18, row_y + 56, percent_item)
+
+    def _build_slider(self, key: str, x0: int, x1: int, cy: int, percent_item: int) -> None:
+        c = self.canvas
+        hit = c.create_rectangle(
+            x0 - 12, cy - SLIDER_HIT_H // 2, x1 + 12, cy + SLIDER_HIT_H // 2,
+            fill=ROW_FILL, outline="",
         )
-        c.create_text(
-            text_x, row_y + 40, text="Em breve", anchor="nw",
-            font=("Consolas", 11), fill=LABEL_DIM,
+        track = c.create_rectangle(
+            x0, cy - SLIDER_H // 2, x1, cy + SLIDER_H // 2,
+            fill=SLIDER_TRACK, outline=SWITCH_OUTLINE, width=2,
         )
+        fill = c.create_rectangle(
+            x0, cy - SLIDER_H // 2, x0, cy + SLIDER_H // 2, fill=SLIDER_FILL, outline="",
+        )
+        knob = c.create_oval(0, 0, 0, 0, fill=SLIDER_KNOB, outline=SWITCH_OUTLINE, width=2)
+        self.sliders[key] = {
+            "x0": x0, "x1": x1, "cy": cy, "fill": fill, "knob": knob,
+            "percent": percent_item, "value": 0.5, "dragging": False,
+        }
+        self._draw_slider(key)
+        for item in (hit, track, fill, knob):
+            c.tag_bind(item, "<ButtonPress-1>", lambda e, k=key: self._slider_press(k, e))
+            c.tag_bind(item, "<B1-Motion>", lambda e, k=key: self._slider_move(k, e))
+            c.tag_bind(item, "<ButtonRelease-1>", lambda _e, k=key: self._slider_release(k))
+
+    def _draw_slider(self, key: str) -> None:
+        s = self.sliders[key]
+        c = self.canvas
+        x = s["x0"] + (s["x1"] - s["x0"]) * s["value"]
+        c.coords(s["fill"], s["x0"], s["cy"] - SLIDER_H // 2, x, s["cy"] + SLIDER_H // 2)
+        c.coords(s["knob"], x - 11, s["cy"] - 11, x + 11, s["cy"] + 11)
+        c.itemconfig(s["percent"], text=f"{round(s['value'] * 100)}%")
+
+    def _set_slider_from_x(self, key: str, x: float) -> None:
+        s = self.sliders[key]
+        value = (x - s["x0"]) / (s["x1"] - s["x0"])
+        value = round(max(0.0, min(1.0, value)) * 100) / 100
+        if value != s["value"]:
+            s["value"] = value
+            self._draw_slider(key)
+            self.bridge.push_command(f"set_{key}_volume", value)
+
+    def _slider_press(self, key: str, event: tk.Event) -> None:
+        self.sliders[key]["dragging"] = True
+        self._set_slider_from_x(key, event.x)
+
+    def _slider_move(self, key: str, event: tk.Event) -> None:
+        self._set_slider_from_x(key, event.x)
+
+    def _slider_release(self, key: str) -> None:
+        self.sliders[key]["dragging"] = False
+        if key == "sfx":
+            # deixa o jogador ouvir o nivel que acabou de escolher
+            self.bridge.play_sfx("ui_click")
+
+    def _click(self, command: str) -> None:
+        self.bridge.play_sfx("ui_click")
+        self.bridge.push_command(command)
 
     def _start_drag(self, event: tk.Event) -> None:
         self._drag_offset = (event.x_root - self.top.winfo_x(), event.y_root - self.top.winfo_y())
@@ -179,6 +247,7 @@ class SettingsWindow:
         self.top.geometry(f"+{event.x_root - ox}+{event.y_root - oy}")
 
     def _on_close(self) -> None:
+        self.bridge.play_sfx("ui_click")
         self.bridge.hide_window(self.window_name)
         self.top.withdraw()
 
@@ -196,6 +265,13 @@ class SettingsWindow:
             return
         c = self.canvas
         c.itemconfig(self.size_text_item, text=snapshot["window_state"])
+
+        for key in ("music", "sfx"):
+            s = self.sliders[key]
+            value = snapshot.get(f"{key}_volume")
+            if value is not None and not s["dragging"] and value != s["value"]:
+                s["value"] = value
+                self._draw_slider(key)
 
         pin_on = snapshot["always_on_top"]
         if pin_on != self._pin_on:

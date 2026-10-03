@@ -209,12 +209,14 @@ class ChestWindow:
             return
         qty = self._quantities.get(item_name, 1) + delta
         qty = max(1, min(qty, row["count"]))
+        self.bridge.play_sfx("ui_click")
         self._quantities[item_name] = qty
         self.canvas.itemconfig(row["qty_text_item"], text=str(qty))
 
     def _sell(self, item_name: str) -> None:
         row = self._row_by_name(item_name)
         if row is None or row["count"] <= 0:
+            self.bridge.play_sfx("denied")
             return
         quantity = self._quantities.get(item_name, 1)
         self.bridge.push_command("sell_item", (item_name, quantity))
@@ -227,6 +229,7 @@ class ChestWindow:
         self.top.geometry(f"+{event.x_root - ox}+{event.y_root - oy}")
 
     def _on_close(self) -> None:
+        self.bridge.play_sfx("ui_click")
         self.bridge.hide_window(self.window_name)
         self.top.withdraw()
 

@@ -19,7 +19,7 @@ from critter_haven.config.upgrades import (
     UPGRADES_BY_ID,
 )
 from critter_haven.config.window_states import DEFAULT_STATE, next_state, state_by_name
-from critter_haven.core import window
+from critter_haven.core import audio, window
 from critter_haven.core.menu_bridge import MenuBridge
 from critter_haven.data.species import all_species_by_id, load_planet, load_planet_safe
 from critter_haven.economy.chest import Chest
@@ -110,6 +110,9 @@ class App:
             )
             window_state = state_by_name(save_dict.get("window_state", DEFAULT_STATE.name))
             always_on_top = save_dict.get("always_on_top", True)
+            saved_audio = save_dict.get("audio", {})
+            audio.set_music_volume(saved_audio.get("music", audio.DEFAULT_USER_VOLUME))
+            audio.set_sfx_volume(saved_audio.get("sfx", audio.DEFAULT_USER_VOLUME))
             gold_multiplier = 1.0 + self.upgrades.effect_total(GOLD_PRODUCTION)
             max_offline_seconds = self.upgrades.effect_total(OFFLINE_PROGRESS)
             offline_result = apply_offline_progress(
@@ -124,6 +127,10 @@ class App:
             self.welcome_back_message = self._build_welcome_back_message(
                 offline_result, elapsed, max_offline_seconds
             )
+
+        audio.start_habitat_music()
+        if self.welcome_back_message:
+            audio.play_sfx("welcome_back")
 
         self.window_state = window_state
         self.surface = pygame.display.set_mode(
@@ -147,6 +154,8 @@ class App:
         self.last_travel_feedback: str | None = None
         self.last_travel_feedback_timer = 0.0
         self.last_fusion_result: str | None = None
+        self._album_complete_announced = self._album_is_complete()
+        self._energy_full_announced = False
         self.animation_time = 0.0
         self.welcome_back_timer = 8.0 if self.welcome_back_message else 0.0
         self.autosave_timer = AUTOSAVE_INTERVAL_SECONDS
@@ -219,6 +228,7 @@ class App:
 
         creature = self.habitat.creature_at(pos[0], pos[1])
         if creature:
+            audio.play_sfx("click_creature")
             creature.on_click()
             self.selected_creature = creature
         else:
@@ -228,6 +238,7 @@ class App:
         if name == "btn_vender_tudo":
             self._sell_all()
             return
+        audio.play_sfx("ui_click")
         window_name = dict(ICON_ROW_BUTTONS).get(name)
         if window_name is not None:
             self.menu_bridge.push_to_menu("show_window", window_name)
@@ -239,7 +250,8 @@ class App:
             elif name == "toggle_pin":
                 self._apply_always_on_top(not self.always_on_top)
             elif name == "buy_upgrade":
-                self.upgrades.buy(UPGRADES_BY_ID[payload], self.wallet)
+                if self.upgrades.buy(UPGRADES_BY_ID[payload], self.wallet):
+                    audio.play_sfx("buy_upgrade")
                 self._apply_upgrade_effects()
             elif name == "travel":
                 destination = next(p for p in PLANETS if p.id == payload)
@@ -248,9 +260,25 @@ class App:
                 self._sell_all()
             elif name == "sell_item":
                 item_name, quantity = payload
-                sell_item(self.chest, self.wallet, self.price_map, item_name, quantity)
+                if sell_item(self.chest, self.wallet, self.price_map, item_name, quantity) > 0:
+                    audio.play_sfx("sell")
             elif name == "fuse":
                 self._fuse_creatures(*payload)
+            elif name == "sfx":
+                audio.play_sfx(payload)
+            elif name == "set_music_volume":
+                audio.set_music_volume(payload)
+            elif name == "set_sfx_volume":
+                audio.set_sfx_volume(payload)
+
+    def _album_is_complete(self) -> bool:
+        discovered, total = self.album.progress(self.habitat.species_pool)
+        return total > 0 and discovered == total
+
+    def _check_album_complete(self) -> None:
+        if not self._album_complete_announced and self._album_is_complete():
+            self._album_complete_announced = True
+            audio.play_sfx("album_complete")
 
     def _fuse_creatures(self, creature_id_a: int, creature_id_b: int) -> None:
         spawned = self.habitat.fuse_creatures(creature_id_a, creature_id_b)
@@ -258,6 +286,8 @@ class App:
             self.last_fusion_result = "Fusão falhou: escolha 2 criaturas diferentes."
             return
         self.album.register(spawned)
+        audio.play_sfx("fuse")
+        self._check_album_complete()
         if self.selected_creature is not None and id(self.selected_creature) in (
             creature_id_a,
             creature_id_b,
@@ -355,6 +385,8 @@ class App:
                 "window_state": self.window_state.name,
                 "album": album_info,
                 "always_on_top": self.always_on_top,
+                "music_volume": audio.get_volumes()[0],
+                "sfx_volume": audio.get_volumes()[1],
                 "upgrades": upgrades_info,
                 "planets": planets_info,
                 "creatures": creatures_info,
@@ -366,10 +398,13 @@ class App:
         if destination.active:
             return
         if travel(destination, self.chest):
+            audio.play_sfx("travel")
             self.last_travel_feedback = f"Homie viajou para {destination.name}!"
         elif destination.requirement_pending:
+            audio.play_sfx("denied")
             self.last_travel_feedback = "Requisito de viagem ainda não definido."
         else:
+            audio.play_sfx("denied")
             self.last_travel_feedback = (
                 f"Faltam itens: {destination.required_item} "
                 f"x{destination.required_quantity}"
@@ -421,10 +456,12 @@ class App:
 
     def _sell_all(self) -> None:
         if self.chest.total_count() == 0:
+            audio.play_sfx("denied")
             self.last_sale_feedback = "Baú vazio."
             self.last_sale_feedback_timer = 2.0
             return
         total = sell_all(self.chest, self.wallet, self.price_map)
+        audio.play_sfx("sell")
         self.last_sale_feedback = f"+{total:.0f} ouro pela venda!"
         self.last_sale_feedback_timer = 2.0
 
@@ -433,10 +470,23 @@ class App:
         spawned = self.habitat.update(dt)
         if spawned:
             self.album.register(spawned)
+            audio.play_sfx("spawn")
+            self._check_album_complete()
+        # energia cheia so "fica" cheia quando o habitat esta lotado (senao
+        # ja nasceu uma criatura): avisa uma vez por enchimento, pro
+        # jogador saber que precisa abrir espaco
+        if self.habitat.is_full and self.habitat.energy_ratio() >= 0.999:
+            if not self._energy_full_announced:
+                self._energy_full_announced = True
+                audio.play_sfx("energy_full")
+        elif self.habitat.energy_ratio() < 0.999:
+            self._energy_full_announced = False
         gold_multiplier = 1.0 + self.upgrades.effect_total(GOLD_PRODUCTION)
-        update_production(
+        items_added = update_production(
             self.habitat.creatures, dt, self.wallet, self.chest, gold_multiplier
         )
+        if items_added:
+            audio.play_sfx("item_drop")
         if self.last_sale_feedback_timer > 0:
             self.last_sale_feedback_timer = max(0.0, self.last_sale_feedback_timer - dt)
         if self.last_travel_feedback_timer > 0:
@@ -458,6 +508,7 @@ class App:
             self.upgrades,
             self.window_state.name,
             self.always_on_top,
+            {"music": audio.get_volumes()[0], "sfx": audio.get_volumes()[1]},
         )
         save_game(save_dict)
 

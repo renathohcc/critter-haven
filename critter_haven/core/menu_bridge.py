@@ -45,6 +45,11 @@ class MenuBridge:
     def push_command(self, name: str, payload: Any = None) -> None:
         self.commands.put((name, payload))
 
+    def play_sfx(self, name: str) -> None:
+        """Pede pro loop do Pygame tocar um efeito sonoro (o mixer so e
+        inicializado/usado na thread principal)."""
+        self.commands.put(("sfx", name))
+
     def drain_commands(self) -> list[tuple[str, Any]]:
         drained = []
         while True:

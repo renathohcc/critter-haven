@@ -200,6 +200,7 @@ class FusionWindow:
         lc.configure(scrollregion=(0, 0, width, content_height))
 
     def _toggle_selection(self, creature_id: int) -> None:
+        self.bridge.play_sfx("ui_click")
         if creature_id in self._selected_ids:
             self._selected_ids.remove(creature_id)
         else:
@@ -233,6 +234,7 @@ class FusionWindow:
 
     def _on_fundir(self) -> None:
         if not getattr(self, "_can_fuse", False):
+            self.bridge.play_sfx("denied")
             return
         id_a, id_b = self._selected_ids
         self.bridge.push_command("fuse", (id_a, id_b))
@@ -248,6 +250,7 @@ class FusionWindow:
         self.top.geometry(f"+{event.x_root - ox}+{event.y_root - oy}")
 
     def _on_close(self) -> None:
+        self.bridge.play_sfx("ui_click")
         self.bridge.hide_window(self.window_name)
         self.top.withdraw()
 

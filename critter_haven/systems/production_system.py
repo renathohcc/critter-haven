@@ -13,8 +13,13 @@ def update_production(
     wallet: Wallet,
     chest: Chest,
     gold_multiplier: float = 1.0,
-) -> None:
+) -> int:
+    """Retorna quantos itens entraram no baú neste passo (o app usa pra
+    decidir se toca o som de item caindo)."""
+    items_added = 0
     for creature in creatures:
         wallet.add(creature.gold_per_second * gold_multiplier * dt)
         if creature.tick_item_production(dt):
-            chest.add_item(creature.species.item_name, 1)
+            if chest.add_item(creature.species.item_name, 1):
+                items_added += 1
+    return items_added
