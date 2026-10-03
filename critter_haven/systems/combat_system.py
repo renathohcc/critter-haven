@@ -282,6 +282,9 @@ class Battle:
             for other in self.enemies:
                 if other is not target and other.alive and abs(other.x - target.x) <= ability["radius"]:
                     other.hp -= damage * ability["fraction"]
+                    self.events.append(
+                        BattleEvent("splash", source=source.uid, target=other.uid, amount=damage * ability["fraction"])
+                    )
 
     # ------------------------------------------------------------ inimigos
     def _enemies_act(self, dt: float) -> None:

@@ -8,6 +8,8 @@ começo); a arte de verdade entra na 11.7."""
 
 from __future__ import annotations
 
+import math
+
 import pygame
 
 from critter_haven.render.fonts import get_font
@@ -36,6 +38,16 @@ ENEMY_LOOK = {
 SPEEDS = (1, 2, 4)
 ATTACK_ANIM_SECONDS = 0.8
 WALK_GRACE_SECONDS = 0.12
+# espécies cujo sprite já olha pra direita (as demais olham pra esquerda e são viradas)
+FACES_RIGHT = {"pebblit"}
+
+# Ataques à distância: projétil em arco da criatura até o alvo + explosão.
+# cores = (borda, meio, núcleo); splash=True usa o raio de área do combate.
+PROJECTILE_STYLES = {
+    "solarva": {"colours": ((255, 120, 30), (255, 200, 70), (255, 250, 210)), "travel": 0.5, "arc": 46, "orb": 6, "blast": 34},
+    "mossnib": {"colours": ((70, 170, 80), (150, 230, 110), (235, 255, 200)), "travel": 0.3, "arc": 14, "orb": 3, "blast": 10},
+}
+BLAST_SECONDS = 0.4
 
 
 class BattleView:
@@ -50,7 +62,10 @@ class BattleView:
         self._enemy_prev_x: dict[int, float] = {}
         self._attack_until: dict[int, float] = {}
         self._moved_at: dict[int, float] = {}
-        self._unit_attack_start: dict[int, float] = {}
+        self._unit_action: dict[int, tuple[str, float]] = {}
+        self._last_x: dict[int, float] = {}
+        self._projectiles: list[dict] = []
+        self._blasts: list[dict] = []
         self._dying: list[list] = []  # [sx, tipo, inicio]
         self._now = 0.0
 
@@ -89,10 +104,13 @@ class BattleView:
             sx = self.screen_x(enemy.x, width)
             colour, size = ENEMY_LOOK.get(enemy.stats.enemy_id, ((150, 150, 150), (20, 20)))
             positions[enemy.uid] = (sx, ground_y - size[1])
+            self._last_x[enemy.uid] = sx
             self._draw_enemy(surface, enemy, sx, ground_y, colour, size)
         positions[0] = (SHIP_SCREEN_X, ground_y - 40)
         self._draw_dying(surface, ground_y, anim_time)
 
+        self._spawn_projectiles(events, battle, positions, width, ground_y)
+        self._draw_projectiles(surface)
         self._collect_floaters(events, positions)
         self._draw_floaters(surface)
         self._draw_hud(surface, battle, mouse_pos)
@@ -121,21 +139,24 @@ class BattleView:
         sheet = load_creature_sheet(unit.stats.species_id)
         alpha = 255 if unit.alive else 90
         if sheet is not None:
-            state, elapsed = "idle", anim_time
-            started = self._unit_attack_start.get(unit.uid)
-            if started is not None and sheet.has_state("attack"):
-                length = len(sheet.state_frames("attack")) / sheet.state_fps("attack")
-                if anim_time - started < length:
-                    state, elapsed = "attack", anim_time - started
+            idle = "battle_idle" if sheet.has_state("battle_idle") else "idle"  # idle de lado
+            state, elapsed = idle, anim_time
+            action = self._unit_action.get(unit.uid)
+            if action is not None and sheet.has_state(action[0]):
+                length = len(sheet.state_frames(action[0])) / sheet.state_fps(action[0])
+                if anim_time - action[1] < length:
+                    state, elapsed = action[0], anim_time - action[1]
             frames = sheet.state_frames(state)
             fps = sheet.state_fps(state)
             index = int(elapsed * fps)
-            index = index % len(frames) if state == "idle" else min(index, len(frames) - 1)
+            index = index % len(frames) if state == idle else min(index, len(frames) - 1)
             # os sprites olham pra esquerda; na batalha as criaturas encaram
             # a direita, de onde vem os inimigos
             key = (unit.stats.species_id, state, index)
             if key not in self._flipped_cache:
-                self._flipped_cache[key] = pygame.transform.flip(frames[index], True, False)
+                # quem tem battle_idle já traz os sprites de batalha na orientação certa
+                flip = unit.stats.species_id not in FACES_RIGHT and not sheet.has_state("battle_idle")
+                self._flipped_cache[key] = pygame.transform.flip(frames[index], flip, False)
             image = self._flipped_cache[key].copy()
             image.set_alpha(alpha)
             rect = image.get_rect(midbottom=(int(sx), int(ground_y + sheet.ground_offset)))
@@ -149,8 +170,8 @@ class BattleView:
 
     def _consume_enemy_events(self, events, unit_ids: set[int], now: float) -> None:
         for event in events:
-            if event.kind == "hit" and event.source in unit_ids:
-                self._unit_attack_start[event.source] = now
+            if event.kind in ("hit", "heal") and event.source in unit_ids:
+                self._unit_action[event.source] = ("attack" if event.kind == "hit" else "heal", now)
             elif event.kind == "hit" and event.source != 0:
                 self._attack_until[event.source] = now + ATTACK_ANIM_SECONDS
             elif event.kind == "death" and event.target in self._enemy_last:
@@ -211,10 +232,96 @@ class BattleView:
         if enemy.hp < enemy.max_hp or enemy.stats.boss:
             self._bar(surface, sx, rect.top + 10, 34, enemy.hp / enemy.max_hp, HP_ENEMY)
 
+    # ---------------------------------------------------------- projéteis
+    def _spawn_projectiles(self, events, battle, positions, width: int, ground_y: float) -> None:
+        species = {u.uid: u.stats.species_id for u in battle.units}
+        splash_radius = {
+            u.uid: u.stats.ability.get("radius", 0) for u in battle.units if u.stats.ability.get("type") == "splash"
+        }
+        scale = (width - SHIP_SCREEN_X - FIELD_MARGIN_RIGHT) / FIELD_LENGTH
+        for event in events:
+            style = PROJECTILE_STYLES.get(species.get(event.source, ""))
+            if style is None or event.kind not in ("hit", "splash"):
+                continue
+            # alvo já pode ter morrido neste passo: usa a última posição vista
+            if event.target in positions:
+                tx = positions[event.target][0]
+            elif event.target in self._last_x:
+                tx = self._last_x[event.target]
+            else:
+                continue
+            ty = ground_y - 22
+            if event.kind == "hit":
+                sx, sy = positions[event.source][0], positions[event.source][1] - 8
+                self._projectiles.append(
+                    {"sx": sx, "sy": sy, "tx": tx, "ty": ty, "start": self._now, "style": style}
+                )
+                radius = style["blast"]
+            else:  # dano em área: explosão menor nos vizinhos
+                radius = max(14, int(splash_radius.get(event.source, 0) * scale * 0.5))
+            self._blasts.append(
+                {"x": tx, "y": ty, "start": self._now + style["travel"], "radius": radius, "style": style}
+            )
+
+    def _draw_projectiles(self, surface) -> None:
+        now = self._now
+        keep = []
+        for p in self._projectiles:
+            style = p["style"]
+            t = (now - p["start"]) / style["travel"]
+            if t >= 1.0:
+                continue
+            keep.append(p)
+            outer, mid, core = style["colours"]
+            for k in range(6, -1, -1):  # rastro primeiro, orbe por cima
+                tt = t - k * 0.045
+                if tt < 0:
+                    continue
+                x = p["sx"] + (p["tx"] - p["sx"]) * tt
+                y = p["sy"] + (p["ty"] - p["sy"]) * tt - style["arc"] * 4 * tt * (1 - tt)
+                if k == 0:
+                    r = style["orb"]
+                    pygame.draw.circle(surface, outer, (int(x), int(y)), r)
+                    pygame.draw.circle(surface, mid, (int(x), int(y)), max(1, r - 2))
+                    pygame.draw.circle(surface, core, (int(x), int(y)), max(1, r - 4))
+                else:
+                    r = max(1, int(style["orb"] * (1 - k / 8)))
+                    pygame.draw.circle(surface, outer if k % 2 else mid, (int(x), int(y)), r)
+        self._projectiles = keep
+
+        live = []
+        for b in self._blasts:
+            age = now - b["start"]
+            if age > BLAST_SECONDS:
+                continue
+            live.append(b)
+            if age < 0:
+                continue
+            outer, mid, core = b["style"]["colours"]
+            f = age / BLAST_SECONDS
+            r = int(b["radius"] * (0.35 + 0.65 * (1 - (1 - f) ** 2)))
+            size = r * 2 + 8
+            layer = pygame.Surface((size, size), pygame.SRCALPHA)
+            c = size // 2
+            alpha = int(255 * (1 - f))
+            pygame.draw.circle(layer, (*outer, int(alpha * 0.55)), (c, c), r)
+            pygame.draw.circle(layer, (*mid, int(alpha * 0.8)), (c, c), max(1, int(r * 0.65)))
+            pygame.draw.circle(layer, (*core, alpha), (c, c), max(1, int(r * 0.3 * (1 - f))))
+            pygame.draw.circle(layer, (*outer, alpha), (c, c), r, 2)
+            surface.blit(layer, (int(b["x"]) - c, int(b["y"]) - c))
+            for i in range(8):  # faíscas em pixel
+                ang = i * 0.785 + 0.3
+                d = r * (0.6 + 0.9 * f)
+                x = b["x"] + math.cos(ang) * d
+                y = b["y"] + math.sin(ang) * d * 0.7 - 8 * f
+                if f < 0.85:
+                    pygame.draw.rect(surface, mid if i % 2 else core, (int(x), int(y), 2, 2))
+        self._blasts = live
+
     # ---------------------------------------------------- numeros flutuantes
     def _collect_floaters(self, events, positions) -> None:
         for event in events:
-            if event.kind not in ("hit", "heal") or event.target not in positions:
+            if event.kind not in ("hit", "heal", "splash") or event.target not in positions:
                 continue
             x, y = positions[event.target]
             colour = (120, 230, 140) if event.kind == "heal" else (255, 230, 150)
