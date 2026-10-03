@@ -114,7 +114,7 @@ _current_music: str | None = None
 
 # ganho extra por faixa: as trilhas de batalha (xDeviruchi) vem masterizadas
 # bem mais altas que a do habitat e devem ficar so como fundo
-MUSIC_GAIN = {"habitat": 1.0, "battle_1": 0.22, "battle_2": 0.22, "final_battle": 0.22}
+MUSIC_GAIN = {"habitat": 1.0, "battle_1": 0.12, "battle_2": 0.12, "final_battle": 0.12}
 
 
 def _music_level(name: str | None) -> float:
