@@ -41,10 +41,16 @@ def test_roles_match_the_design():
     assert units["solarva"].role == "attacker"
 
 
-def test_defense_is_won_and_then_stays_won():
-    battle = run_battle("elyndor", ["solarva"] * 4 + ["pebblit"] * 3 + ["lumibloom"] * 2)
+def test_defense_is_won_after_all_waves_are_cleared():
+    defense = make_defense([[("grunt", 3)], [("grunt", 4)]], ship_damage=10.0)
+    battle = Battle(defense, ["breezel", "pebblit", "lumibloom"])
+    battle.start_next_wave()
+    while battle.phase in ("wave", "between_waves") and battle.time < 600:
+        if battle.phase == "between_waves":
+            battle.start_next_wave()
+        battle.step(0.1)
     assert battle.phase == "won"
-    assert battle.ship.alive
+    assert battle.wave_index == 1 and battle.ship.alive
 
 
 def test_defense_without_army_is_lost():

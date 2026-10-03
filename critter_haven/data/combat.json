@@ -50,9 +50,9 @@
     "solarva": {
       "role": "attacker",
       "max_hp": 110,
-      "damage": 38,
+      "damage": 28,
       "range": 190,
-      "attack_interval": 2.8,
+      "attack_interval": 2.6,
       "ability": {
         "type": "splash",
         "radius": 55,
@@ -95,8 +95,8 @@
     },
     "boss": {
       "name": "Guardian",
-      "max_hp": 3000,
-      "damage": 30,
+      "max_hp": 4200,
+      "damage": 40,
       "speed": 14,
       "range": 40,
       "attack_interval": 2.2,
@@ -199,40 +199,40 @@
         [
           {
             "enemy": "grunt",
-            "count": 10,
-            "interval": 1.3,
+            "count": 14,
+            "interval": 1.0,
             "delay": 0
           },
           {
             "enemy": "spitter",
-            "count": 5,
-            "interval": 2.0,
+            "count": 8,
+            "interval": 1.6,
             "delay": 2
           },
           {
             "enemy": "brute",
-            "count": 2,
-            "interval": 5.0,
-            "delay": 6
+            "count": 4,
+            "interval": 4.0,
+            "delay": 5
           }
         ],
         [
           {
             "enemy": "brute",
-            "count": 4,
-            "interval": 4.0,
+            "count": 6,
+            "interval": 3.0,
             "delay": 0
           },
           {
             "enemy": "runner",
-            "count": 10,
-            "interval": 1.0,
+            "count": 14,
+            "interval": 0.8,
             "delay": 2
           },
           {
             "enemy": "spitter",
-            "count": 5,
-            "interval": 2.0,
+            "count": 8,
+            "interval": 1.5,
             "delay": 4
           }
         ],
@@ -245,9 +245,15 @@
           },
           {
             "enemy": "grunt",
-            "count": 8,
-            "interval": 2.0,
+            "count": 12,
+            "interval": 1.5,
             "delay": 4
+          },
+          {
+            "enemy": "spitter",
+            "count": 6,
+            "interval": 2.5,
+            "delay": 6
           }
         ]
       ]
