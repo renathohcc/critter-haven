@@ -44,12 +44,13 @@ class BattleView:
         self.floaters: list[list] = []  # [x, y, texto, cor, ttl]
         self._buttons: dict[str, pygame.Rect] = {}
         self.choices: list[Card] = []  # cartas ofertadas (entre as waves)
-        self._flipped_cache: dict[tuple[str, int], pygame.Surface] = {}
+        self._flipped_cache: dict[tuple[str, str, int], pygame.Surface] = {}
         # estado de animacao dos inimigos com arte (por uid)
         self._enemy_last: dict[int, tuple[float, str]] = {}  # uid -> (sx, tipo)
         self._enemy_prev_x: dict[int, float] = {}
         self._attack_until: dict[int, float] = {}
         self._moved_at: dict[int, float] = {}
+        self._unit_attack_start: dict[int, float] = {}
         self._dying: list[list] = []  # [sx, tipo, inicio]
         self._now = 0.0
 
@@ -120,12 +121,19 @@ class BattleView:
         sheet = load_creature_sheet(unit.stats.species_id)
         alpha = 255 if unit.alive else 90
         if sheet is not None:
-            frames = sheet.state_frames("idle")
-            fps = sheet.state_fps("idle")
-            index = int(anim_time * fps) % len(frames)
+            state, elapsed = "idle", anim_time
+            started = self._unit_attack_start.get(unit.uid)
+            if started is not None and sheet.has_state("attack"):
+                length = len(sheet.state_frames("attack")) / sheet.state_fps("attack")
+                if anim_time - started < length:
+                    state, elapsed = "attack", anim_time - started
+            frames = sheet.state_frames(state)
+            fps = sheet.state_fps(state)
+            index = int(elapsed * fps)
+            index = index % len(frames) if state == "idle" else min(index, len(frames) - 1)
             # os sprites olham pra esquerda; na batalha as criaturas encaram
             # a direita, de onde vem os inimigos
-            key = (unit.stats.species_id, index)
+            key = (unit.stats.species_id, state, index)
             if key not in self._flipped_cache:
                 self._flipped_cache[key] = pygame.transform.flip(frames[index], True, False)
             image = self._flipped_cache[key].copy()
@@ -141,7 +149,9 @@ class BattleView:
 
     def _consume_enemy_events(self, events, unit_ids: set[int], now: float) -> None:
         for event in events:
-            if event.kind == "hit" and event.source not in unit_ids and event.source != 0:
+            if event.kind == "hit" and event.source in unit_ids:
+                self._unit_attack_start[event.source] = now
+            elif event.kind == "hit" and event.source != 0:
                 self._attack_until[event.source] = now + ATTACK_ANIM_SECONDS
             elif event.kind == "death" and event.target in self._enemy_last:
                 sx, kind = self._enemy_last.pop(event.target)
