@@ -1,0 +1,256 @@
+{
+  "units": {
+    "pebblit": {
+      "role": "tank",
+      "max_hp": 140,
+      "damage": 9,
+      "range": 30,
+      "attack_interval": 1.0,
+      "ability": {
+        "type": "taunt_guard",
+        "reduction": 0.3
+      }
+    },
+    "mossnib": {
+      "role": "buffer",
+      "max_hp": 70,
+      "damage": 8,
+      "range": 80,
+      "attack_interval": 1.2,
+      "ability": {
+        "type": "damage_aura",
+        "radius": 150,
+        "bonus": 0.25
+      }
+    },
+    "lumibloom": {
+      "role": "healer",
+      "max_hp": 60,
+      "damage": 0,
+      "range": 120,
+      "attack_interval": 1.0,
+      "ability": {
+        "type": "heal",
+        "amount": 14,
+        "interval": 2.5
+      }
+    },
+    "breezel": {
+      "role": "attacker",
+      "max_hp": 55,
+      "damage": 7,
+      "range": 140,
+      "attack_interval": 0.7,
+      "ability": {
+        "type": "slow_hit",
+        "slow": 0.3,
+        "duration": 1.5
+      }
+    },
+    "solarva": {
+      "role": "attacker",
+      "max_hp": 110,
+      "damage": 38,
+      "range": 190,
+      "attack_interval": 2.8,
+      "ability": {
+        "type": "splash",
+        "radius": 55,
+        "fraction": 0.5
+      }
+    }
+  },
+  "enemies": {
+    "grunt": {
+      "name": "Grunt",
+      "max_hp": 56,
+      "damage": 6,
+      "speed": 28,
+      "range": 22,
+      "attack_interval": 1.2
+    },
+    "runner": {
+      "name": "Runner",
+      "max_hp": 31,
+      "damage": 4,
+      "speed": 55,
+      "range": 20,
+      "attack_interval": 0.9
+    },
+    "brute": {
+      "name": "Brute",
+      "max_hp": 224,
+      "damage": 14,
+      "speed": 18,
+      "range": 24,
+      "attack_interval": 2.0
+    },
+    "spitter": {
+      "name": "Spitter",
+      "max_hp": 42,
+      "damage": 5,
+      "speed": 24,
+      "range": 140,
+      "attack_interval": 1.6
+    },
+    "boss": {
+      "name": "Guardian",
+      "max_hp": 3000,
+      "damage": 30,
+      "speed": 14,
+      "range": 40,
+      "attack_interval": 2.2,
+      "boss": true
+    }
+  },
+  "planets": {
+    "elyndor": {
+      "ship": {
+        "max_hp": 400,
+        "damage": 6,
+        "range": 150,
+        "attack_interval": 1.5
+      },
+      "waves": [
+        [
+          {
+            "enemy": "grunt",
+            "count": 5,
+            "interval": 2.0,
+            "delay": 0
+          }
+        ],
+        [
+          {
+            "enemy": "grunt",
+            "count": 6,
+            "interval": 1.8,
+            "delay": 0
+          },
+          {
+            "enemy": "runner",
+            "count": 3,
+            "interval": 2.0,
+            "delay": 4
+          }
+        ],
+        [
+          {
+            "enemy": "grunt",
+            "count": 6,
+            "interval": 1.6,
+            "delay": 0
+          },
+          {
+            "enemy": "spitter",
+            "count": 3,
+            "interval": 3.0,
+            "delay": 3
+          }
+        ],
+        [
+          {
+            "enemy": "runner",
+            "count": 8,
+            "interval": 1.2,
+            "delay": 0
+          },
+          {
+            "enemy": "brute",
+            "count": 1,
+            "interval": 1.0,
+            "delay": 6
+          }
+        ],
+        [
+          {
+            "enemy": "grunt",
+            "count": 8,
+            "interval": 1.5,
+            "delay": 0
+          },
+          {
+            "enemy": "spitter",
+            "count": 4,
+            "interval": 2.5,
+            "delay": 2
+          },
+          {
+            "enemy": "brute",
+            "count": 1,
+            "interval": 1.0,
+            "delay": 8
+          }
+        ],
+        [
+          {
+            "enemy": "brute",
+            "count": 3,
+            "interval": 5.0,
+            "delay": 0
+          },
+          {
+            "enemy": "runner",
+            "count": 8,
+            "interval": 1.2,
+            "delay": 3
+          }
+        ],
+        [
+          {
+            "enemy": "grunt",
+            "count": 10,
+            "interval": 1.3,
+            "delay": 0
+          },
+          {
+            "enemy": "spitter",
+            "count": 5,
+            "interval": 2.0,
+            "delay": 2
+          },
+          {
+            "enemy": "brute",
+            "count": 2,
+            "interval": 5.0,
+            "delay": 6
+          }
+        ],
+        [
+          {
+            "enemy": "brute",
+            "count": 4,
+            "interval": 4.0,
+            "delay": 0
+          },
+          {
+            "enemy": "runner",
+            "count": 10,
+            "interval": 1.0,
+            "delay": 2
+          },
+          {
+            "enemy": "spitter",
+            "count": 5,
+            "interval": 2.0,
+            "delay": 4
+          }
+        ],
+        [
+          {
+            "enemy": "boss",
+            "count": 1,
+            "interval": 1.0,
+            "delay": 0
+          },
+          {
+            "enemy": "grunt",
+            "count": 8,
+            "interval": 2.0,
+            "delay": 4
+          }
+        ]
+      ]
+    }
+  }
+}
