@@ -21,7 +21,8 @@ CREDITS_LINES = (
     "UI, ícones e logo: Aseprite",
     "Cenário: GandalfHardcore FREE Platformer Assets (itch.io)",
     "Mapa: Tiled  -  Engine: Python + pygame-ce",
-    "Música e efeitos sonoros: gerados por IA",
+    "Música do habitat e efeitos: gerados por IA",
+    "Batalha: Original music by Marllon Silva (xDeviruchi)",
 )
 
 TEXT_GOLD = (244, 214, 147)
@@ -141,17 +142,17 @@ class StartMenu:
 
     def _draw_credits(self, surface: pygame.Surface, panel: pygame.Rect) -> None:
         title_font = get_font("consolas", 20, bold=True)
-        font = get_font("consolas", 13)
-        y = panel.top + 34
+        font = get_font("consolas", 12)
+        y = panel.top + 28
         for i, line in enumerate(CREDITS_LINES):
             if not line:
-                y += 8
+                y += 4
                 continue
             f = title_font if i == 0 else font
             color = TEXT_GOLD if i == 0 else TEXT_CREAM
             text = f.render(line, True, color)
             surface.blit(text, text.get_rect(midtop=(panel.centerx, y)))
-            y += text.get_height() + 4
+            y += text.get_height() + 2
 
     def _draw_confirm(self, surface: pygame.Surface, panel: pygame.Rect) -> None:
         title_font = get_font("consolas", 20, bold=True)

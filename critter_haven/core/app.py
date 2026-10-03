@@ -143,6 +143,7 @@ class App:
         self._battle_accumulator = 0.0
         self._pre_battle_window_state = None
         self._cards_picked: list[str] = []
+        self._defeat_announced = False
         self.window_state = EXPANDED
         self.surface = pygame.display.set_mode(
             (self.window_state.width, self.window_state.height)
@@ -279,14 +280,17 @@ class App:
             self._apply_window_state(EXPANDED)
         army = [c.species.id for c in self.habitat.creatures]
         self.battle = Battle(defense, army)
+        audio.play_battle_music(0, self.battle.total_waves)
         self.battle_view = BattleView()
         self._battle_accumulator = 0.0
         self._cards_picked = []
         self._cards_offered_wave = -1
+        self._defeat_announced = False
         self.selected_creature = None
         self.mode = "battle"
 
     def _end_battle(self) -> None:
+        audio.start_habitat_music()
         self.mode = "playing"
         self.battle = None
         if self._pre_battle_window_state is not None and self.window_state is not self._pre_battle_window_state:
@@ -301,6 +305,10 @@ class App:
         while self._battle_accumulator >= step:
             self._battle_accumulator -= step
             self.battle.step(step)
+            self._play_battle_sounds()
+        if self.battle.phase == "lost" and not self._defeat_announced:
+            self._defeat_announced = True
+            audio.play_sfx("defeat")
         if self.battle.phase == "won" and self.habitat.planet not in self.cleared_defenses:
             self._register_defense_cleared()
         # fim de wave (e nao e a ultima): oferece 3 cartas, uma por wave
@@ -308,6 +316,26 @@ class App:
             if getattr(self, "_cards_offered_wave", -1) != self.battle.wave_index:
                 self._cards_offered_wave = self.battle.wave_index
                 self.battle_view.choices = draw_choices(self.battle.rng, self._cards_picked)
+
+    def _play_battle_sounds(self) -> None:
+        battle = self.battle
+        unit_ids = {u.uid for u in battle.units}
+        for event in battle.events:
+            if event.kind == "hit":
+                if event.source == 0 or event.source in unit_ids:
+                    audio.play_sfx("hit_enemy")
+                elif event.target == 0:
+                    audio.play_sfx("ship_hit")
+                else:
+                    audio.play_sfx("hit_ally")
+            elif event.kind == "heal":
+                audio.play_sfx("heal")
+            elif event.kind == "death" and event.target not in unit_ids:
+                audio.play_sfx("enemy_death")
+            elif event.kind == "wave_start":
+                audio.play_sfx("wave_start")
+                if battle.is_last_wave:
+                    audio.play_sfx("boss_appear")
 
     def _register_defense_cleared(self) -> None:
         """Vencer a defesa libera o proximo planeta da cadeia (e e salvo
@@ -336,6 +364,9 @@ class App:
             audio.play_sfx("buy_upgrade")
         elif action == "next_wave":
             self.battle.start_next_wave()
+            audio.play_battle_music(self.battle.wave_index, self.battle.total_waves)
+            # step() limpa os eventos, entao o som de inicio de wave toca aqui
+            self._play_battle_sounds()
         elif action in ("exit", "finish"):
             self._end_battle()
 

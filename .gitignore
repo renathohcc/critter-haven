@@ -6,3 +6,8 @@ saves/
 *.egg-info/
 .vscode/
 .idea/
+
+# trilhas de batalha (xDeviruchi): a licenca proibe redistribuir os arquivos originais
+critter_haven/assets/audio/music/battle_1.ogg
+critter_haven/assets/audio/music/battle_2.ogg
+critter_haven/assets/audio/music/final_battle.ogg
