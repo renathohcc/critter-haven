@@ -49,12 +49,15 @@ from critter_haven.render.creature_render import (
 )
 from critter_haven.render.fonts import get_font
 from critter_haven.render.tilemap import TileMap, load_map
+from critter_haven.data.combat import load_combat_data
+from critter_haven.render.battle_render import BattleView
 from critter_haven.render.start_menu import StartMenu
 from critter_haven.render.tutorial_hint import draw_highlight, draw_hint
 from critter_haven.render.ui_icons import get_button
 from critter_haven.systems.offline_progress import apply_offline_progress
 from critter_haven.systems.production_system import update_production
 from critter_haven.systems.travel_system import can_travel, travel
+from critter_haven.systems.combat_system import Battle
 from critter_haven.systems.tutorial import Tutorial
 from critter_haven.ui.menu_window import run_menu_window
 
@@ -78,6 +81,7 @@ ICON_ROW_BUTTONS = (
     ("btn_bau", "bau"),
     ("btn_upgrades", "upgrades"),
     ("btn_nave", "nave"),
+    ("btn_defesa", None),
     ("btn_fusao", "fusion"),
     ("btn_album", "album"),
     ("btn_config", "config"),
@@ -131,6 +135,10 @@ class App:
         self.start_menu = StartMenu(has_save=save_dict is not None)
         self.tutorial = Tutorial.from_saved(save_dict.get("tutorial") if save_dict else None)
         self._tutorial_skip_rect = pygame.Rect(0, 0, 0, 0)
+        self.battle: Battle | None = None
+        self.battle_view = BattleView()
+        self._battle_accumulator = 0.0
+        self._pre_battle_window_state = None
         self.window_state = EXPANDED
         self.surface = pygame.display.set_mode(
             (self.window_state.width, self.window_state.height)
@@ -195,6 +203,8 @@ class App:
             self._process_menu_commands()
             if self.mode == "playing":
                 self._update(dt)
+            elif self.mode == "battle":
+                self._update_battle(dt)
             self._publish_menu_snapshot()
             self._render(dt)
 
@@ -224,6 +234,9 @@ class App:
         if self.mode == "menu":
             self._handle_start_menu_click(pos)
             return
+        if self.mode == "battle":
+            self._handle_battle_click(pos)
+            return
         if self.tutorial.active and self._tutorial_skip_rect.collidepoint(pos):
             self.tutorial.skip()
             audio.play_sfx("ui_click")
@@ -241,6 +254,57 @@ class App:
             self.selected_creature = creature
         else:
             self.selected_creature = None
+
+    def _start_defense(self) -> None:
+        """Entra no modo batalha: a producao do habitat pausa (so o modo
+        "playing" roda _update), a janela vai pro tamanho expandido e as
+        criaturas atuais viram o exercito da defesa."""
+        defense = load_combat_data().planets.get(self.habitat.planet)
+        if defense is None or not self.habitat.creatures:
+            audio.play_sfx("denied")
+            self.last_sale_feedback = (
+                "Você precisa de criaturas para defender." if defense else "Sem defesa neste planeta."
+            )
+            self.last_sale_feedback_timer = 2.5
+            return
+        audio.play_sfx("ui_click")
+        for window_name in ("bau", "upgrades", "nave", "album", "fusion", "config"):
+            self.menu_bridge.hide_window(window_name)
+        self._pre_battle_window_state = self.window_state
+        if self.window_state is not EXPANDED:
+            self._apply_window_state(EXPANDED)
+        army = [c.species.id for c in self.habitat.creatures]
+        self.battle = Battle(defense, army)
+        self.battle_view = BattleView()
+        self._battle_accumulator = 0.0
+        self.selected_creature = None
+        self.mode = "battle"
+
+    def _end_battle(self) -> None:
+        self.mode = "playing"
+        self.battle = None
+        if self._pre_battle_window_state is not None and self.window_state is not self._pre_battle_window_state:
+            self._apply_window_state(self._pre_battle_window_state)
+
+    def _update_battle(self, dt: float) -> None:
+        if self.battle is None:
+            return
+        self.animation_time += dt
+        step = 0.05
+        self._battle_accumulator += min(dt, 0.1) * self.battle_view.speed
+        while self._battle_accumulator >= step:
+            self._battle_accumulator -= step
+            self.battle.step(step)
+
+    def _handle_battle_click(self, pos: tuple[int, int]) -> None:
+        action = self.battle_view.click(pos)
+        if action is None or self.battle is None:
+            return
+        audio.play_sfx("ui_click")
+        if action == "next_wave":
+            self.battle.start_next_wave()
+        elif action in ("exit", "finish"):
+            self._end_battle()
 
     def _handle_start_menu_click(self, pos: tuple[int, int]) -> None:
         action = self.start_menu.click(pos)
@@ -311,6 +375,9 @@ class App:
     def _handle_icon_click(self, name: str) -> None:
         if name == "btn_vender_tudo":
             self._sell_all()
+            return
+        if name == "btn_defesa":
+            self._start_defense()
             return
         audio.play_sfx("ui_click")
         if name == "btn_bau":
@@ -610,6 +677,13 @@ class App:
                 self.surface.blit(background, (0, 0))
             else:
                 self.surface.fill(BACKGROUND_COLOR)
+        if self.mode == "battle" and self.battle is not None:
+            self.battle_view.draw(
+                self.surface, self.battle, self.animation_time,
+                self.habitat.spawn_y, pygame.mouse.get_pos(),
+            )
+            pygame.display.flip()
+            return
         if self.mode == "menu":
             for creature in self.habitat.creatures:
                 draw_creature(self.surface, creature, 0.0)
@@ -801,7 +875,7 @@ class App:
             self.surface.blit(surf, (panel.x + 8, panel.y + 8 + i * 20))
 
     def quit(self) -> None:
-        if self.mode == "playing":
+        if self.mode in ("playing", "battle"):
             self._save_game()
         self.menu_bridge.stop_event.set()
         self.menu_thread.join(timeout=2.0)
